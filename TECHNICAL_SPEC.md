@@ -7,7 +7,7 @@ This document describes how Whistle Trainer is built. Product behavior, UI, asse
 | Area | Decision |
 | --- | --- |
 | Language and UI | Python 3.12 with PySide6 (Qt 6). |
-| Audio I/O | `sounddevice` (PortAudio), using the PulseAudio/PipeWire host API. |
+| Audio I/O | Qt Multimedia (`QAudioSource`, `QAudioSink`, `QMediaDevices`), which uses PipeWire/PulseAudio. PortAudio was dropped: the version in Ubuntu 24.04 only offers raw ALSA devices, not the PipeWire devices by name. |
 | Signal processing | NumPy; pitch detection with the YIN algorithm. |
 | Song format | MusicXML subset (single melodic line), parsed with the standard library. |
 | Bundled songs | Public domain: Ode to Joy, Twinkle Twinkle Little Star, Frère Jacques, plus an introductory exercise. |
@@ -35,16 +35,18 @@ whistle_trainer/
     timing.py            Beats to seconds, event schedule
   audio/
     devices.py           Input/output device listing and monitoring
-    capture.py           Input stream and frame queue
+    capture.py           Capture and analysis worker thread
     playback.py          Output stream, mixer, scheduled sounds
     synth.py             Whistle tone and metronome click synthesis
   pitch/
     yin.py               YIN pitch estimator
+    bandpass.py          Streaming FIR band-pass filter
     analyzer.py          Framing, level, frame classification
     display.py           Smoothed "detected note" for the UI
     calibration.py       Audio setup measurements and thresholds
   assessment/
     frames.py            AnalysisFrame and frame classes
+    hold.py              Hold tracking for one target note (shared by the engines)
     guided.py            Guided mode engine
     rhythm.py            Continuous rhythm mode engine
     session.py           Drives an engine, owns position, retries, pause/resume
@@ -53,12 +55,10 @@ whistle_trainer/
     settings.py          Settings persistence
     progress.py          Per-song, per-mode progress persistence
   ui/
-    pages/               library.py, setup.py, listen.py, practice.py, summary.py
+    pages/               library.py, setup.py, test_input.py, listen.py, practice.py, summary.py
     score_view.py        Staff rendering, highlighting, scrolling, note selection
-    pitch_meter.py       Pitch direction and tolerance display
-    hold_indicator.py    Hold and rest progress
+    meters.py            Input level meter, pitch meter, hold indicator
     beat_indicator.py    Count-in and visual beats
-    level_meter.py       Input activity meter
   resources/
     songs/*.musicxml
     fonts/Bravura.otf
@@ -85,30 +85,28 @@ The app has four layers, and dependencies only point downward:
 
 | Thread | Work |
 | --- | --- |
-| PortAudio input callback | Copies samples and their capture timestamp into a lock-free queue. Does nothing else. |
-| Analysis worker (QThread) | Drains the queue, runs pitch analysis, feeds frames to the active engine, emits results to the UI via queued Qt signals. |
-| PortAudio output callback | Mixes scheduled sounds (Listen notes, reference tones, metronome clicks) from a pre-rendered schedule. |
-| Qt main thread | UI rendering at display refresh rate; reads the latest state from signals. |
+| Capture worker (QThread) | Owns the `QAudioSource`, reads samples as they arrive (about every 20 ms), runs the analyzer, and emits each batch of frames to the main thread through a queued Qt signal. |
+| Qt main thread | Feeds frame batches to the active engine, updates the UI, and owns the `QAudioSink` for playback. |
 
-Engines run on the analysis worker so that assessment never waits for UI rendering. UI commands (pause, retry, settings changes) are sent to the worker through a command queue and applied between frames.
+Engines run on the main thread. This does not affect accuracy: assessment depends only on frame timestamps from the capture clock, never on when a batch arrives, so a busy UI can delay feedback but cannot change a result. Analysis, the expensive part, stays on the worker.
 
 ### Clock
 
-All timing uses one monotonic clock in seconds. Each input block is stamped with its ADC capture time from the PortAudio callback (`time.inputBufferAdcTime`), converted to the shared clock. Each analysis frame's timestamp is the capture time of the frame's center sample. Rhythm schedules, metronome clicks, and visual beats are all expressed on this clock. Output sounds are scheduled using `time.outputBufferDacTime` so that clicks are heard on the beat. Engines never read the system clock themselves; they only use frame timestamps, which makes them deterministic in tests.
+Assessment time is the capture clock: the number of samples received since capture started, divided by the sample rate. Each analysis frame's timestamp is the time of its window's center sample, corrected for the band-pass filter's delay. Rhythm schedules and visual beats are expressed on this clock. Qt Multimedia provides no hardware timestamps, so output sounds (milestone 4 onward) are aligned by mapping the sink's processed-sample count to the capture clock when both start. Engines never read the system clock themselves; they only use frame timestamps, which makes them deterministic in tests.
 
 ## Audio input and analysis
 
 ### Capture
 
-- Mono, 48 kHz, float32, 256-sample blocks (about 5 ms). If the device does not support 48 kHz, use 44.1 kHz; analysis parameters are defined in milliseconds and converted.
+- Mono, 48 kHz, float32, with a requested 20 ms buffer. If the device does not support this format, use its preferred format (8, 16, or 32-bit integer or float, any sample rate and channel count) and convert. Analysis parameters are defined in seconds and converted to samples.
 - Multi-channel inputs are mixed to mono.
 - Audio is held only in memory and discarded after analysis, as the product specification requires. Nothing is written to disk.
 
 ### Frames
 
 - Analysis window 2048 samples (about 43 ms), hop 10 ms. Each hop produces one `AnalysisFrame`.
-- Before YIN, apply a band-pass filter of 400 Hz to 4.5 kHz to remove hum and hiss outside the whistle range.
-- Expected total delay from sound to screen: about 22 ms window center offset + 10 ms hop + up to 17 ms display refresh + device latency, which keeps the 150 ms visible feedback target.
+- Before YIN and level measurement, apply a band-pass filter of 400 Hz to 4.5 kHz to remove hum and hiss outside the whistle range: a linear-phase FIR filter of 1025 taps with a Hann window (about 10.7 ms delay), applied by FFT convolution. Mains hum (50 Hz) is attenuated by more than 80 dB; 500 Hz to 4.2 kHz passes unchanged.
+- Expected total delay from sound to screen: about 11 ms filter delay + 21 ms window center offset + 10 ms hop + 20 ms capture buffer + up to 17 ms display refresh, about 80 ms, within the 150 ms visible feedback target. To be confirmed with a real microphone.
 
 `AnalysisFrame` fields: `time`, `level_db` (RMS in dBFS), `f0_hz` (or none), `confidence` (0 to 1), `frame_class`.
 
@@ -143,14 +141,14 @@ The "reliable detected note" shown in the UI is smoothed separately from assessm
 4. **Usability:** if the whistle is less than 12 dB above the noise floor, or no steady pitch is found, show the setup problem message from the product specification.
 5. **Optional range:** the user whistles comfortable low and high notes; the median pitch of each is stored as the practice range and used to suggest a transposition in the library.
 
-Calibration results are stored per input device.
+Calibration results are stored per input device id. Until an input is set up, an activity threshold of −50 dBFS is used.
 
 ### Devices
 
-- List inputs and outputs from PortAudio's PulseAudio/PipeWire host API; identify devices by name, because indices change between sessions.
-- A saved device that is missing is shown as unavailable; the app never switches to another device by itself.
-- PortAudio does not report newly connected devices, so the device list is refreshed by reinitializing PortAudio when Audio setup opens or the user presses Refresh, and only while no stream is running.
-- A stream error or stopped callback while practicing is treated as input loss: the session pauses and shows the input problem message.
+- List inputs and outputs from `QMediaDevices`. Devices are identified by their id, the PipeWire/PulseAudio node name (for example `alsa_input.usb-…`), which stays the same between sessions; the description is saved alongside it for display.
+- A saved device that is missing is shown as "(not connected)" and stays selected; the app never switches to another device by itself.
+- `QMediaDevices` reports connected and disconnected devices, and the lists update immediately. A reconnected device is not opened again until the user chooses it or starts setup.
+- A source error, or the current input disappearing from the device list, is treated as input loss: capture stops and the input problem message is shown.
 
 ## Music model and songs
 
@@ -269,7 +267,7 @@ The metronome click is a 20 ms decaying burst at 2 kHz for beat one and 1.5 kHz 
 
 ### Playback service
 
-A single output stream on the selected output device (default: system default) mixes scheduled sounds. Sounds are queued with a start time on the shared clock; the service reports the actual start time of each played note so the UI can keep the highlight in sync. Stopping clears the queue with a 10 ms fade-out to avoid clicks.
+A single `QAudioSink` on the selected output device (default: system default) mixes scheduled sounds. Sounds are queued with a start time on the shared clock; the service reports the actual start time of each played note so the UI can keep the highlight in sync. Stopping clears the queue with a 10 ms fade-out to avoid clicks.
 
 ### Listen mode player
 
@@ -286,7 +284,8 @@ A single `QMainWindow` with a `QStackedWidget`:
 | Page | Notes |
 | --- | --- |
 | Library | Song list with length, range, and progress; preparation panel with mode, tempo, difficulty, transposition (with suggestion), Listen, Start, and Audio setup. The introductory exercise is listed first. |
-| Audio setup | Input and output selectors with Refresh, live level meter, detected note, step-by-step calibration with status text. |
+| Audio setup | Input and output selectors, live level meter, detected note, step-by-step calibration with status text, Measure my range, and Test input. |
+| Test input | Whistle one selectable target note (C5 to C7, default the middle of the measured range, else B5) with the detected note, pitch meter, hold indicator for a 1-second hold, guidance text, and Try again. Uses the guided-mode hold rules. |
 | Listen | Score view and Listen controls. |
 | Practice | Score view, target note and octave, detected note, pitch meter, hold indicator, beat indicator (rhythm), listening indicator, and controls. |
 | Summary | Results from the session and Repeat, Restart, Library. |
@@ -340,8 +339,8 @@ Kept in `tests/MANUAL_CHECKS.md`: setup with a built-in and a USB microphone, qu
 
 ## Installation and running
 
-- System packages on Ubuntu 24.04: `python3-venv`, `libportaudio2`, `libxcb-cursor0` (needed by Qt 6 on X11).
-- `scripts/setup.sh` checks for these, creates `.venv`, and installs pinned versions from `requirements.txt` (PySide6-Essentials, sounddevice, numpy, platformdirs). `scripts/setup.sh --dev` installs `requirements-dev.txt`, which adds pytest and pytest-qt.
+- System packages on Ubuntu 24.04: `python3-venv`, `libpulse0` (audio through PipeWire's PulseAudio interface), `libxcb-cursor0` (needed by Qt 6 on X11).
+- `scripts/setup.sh` checks for these, creates `.venv`, and installs pinned versions from `requirements.txt` (PySide6-Essentials, PySide6-Addons for Qt Multimedia, numpy, platformdirs). `scripts/setup.sh --dev` installs `requirements-dev.txt`, which adds pytest and pytest-qt.
 - `./run.sh` starts the app; `scripts/install-desktop.sh` adds a launcher to the application menu.
 - The app works offline; there is no network access at runtime.
 

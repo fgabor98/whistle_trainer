@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 
 missing=()
 python3 -c 'import venv, ensurepip' 2>/dev/null || missing+=(python3-venv)
-ldconfig -p | grep -q 'libportaudio\.so\.2' || missing+=(libportaudio2)
+ldconfig -p | grep -q 'libpulse\.so\.0' || missing+=(libpulse0)
 ldconfig -p | grep -q 'libxcb-cursor\.so\.0' || missing+=(libxcb-cursor0)
 if (( ${#missing[@]} )); then
     echo "Missing system packages: ${missing[*]}" >&2

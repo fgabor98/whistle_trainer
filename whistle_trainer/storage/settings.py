@@ -67,8 +67,10 @@ class SongPreferences:
 
 @dataclass
 class Settings:
-    input_device: str | None = None
+    input_device: str | None = None  # device id
+    input_device_name: str | None = None
     output_device: str | None = None
+    output_device_name: str | None = None
     calibrations: dict[str, Calibration] = field(default_factory=dict)
     show_note_names: bool = config.SHOW_NOTE_NAMES
     last_song_id: str | None = None
@@ -89,7 +91,9 @@ class Settings:
             raise UnreadableFile("unsupported schema version")
         return cls(
             input_device=require(data, "input_device", str),
+            input_device_name=require(data, "input_device_name", str),
             output_device=require(data, "output_device", str),
+            output_device_name=require(data, "output_device_name", str),
             calibrations={
                 device: Calibration.from_dict(_object(value))
                 for device, value in require(data, "calibrations", dict, {}).items()

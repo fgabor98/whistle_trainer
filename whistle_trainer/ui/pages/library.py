@@ -3,7 +3,16 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QHeaderView, QLabel, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QPushButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from whistle_trainer import strings
 from whistle_trainer.music.library import SongLibrary
@@ -18,6 +27,7 @@ def format_length(total_seconds: float) -> str:
 
 class LibraryPage(QWidget):
     song_selected = Signal(str)  # song id
+    audio_setup_requested = Signal()
 
     def __init__(self, library: SongLibrary, parent: QWidget | None = None):
         super().__init__(parent)
@@ -39,9 +49,16 @@ class LibraryPage(QWidget):
         hint = QLabel(strings.LIBRARY_LENGTH_HINT)
         hint.setWordWrap(True)
 
+        self.audio_setup_button = QPushButton(strings.LIBRARY_AUDIO_SETUP)
+        self.audio_setup_button.clicked.connect(self.audio_setup_requested)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        buttons.addWidget(self.audio_setup_button)
+
         layout = QVBoxLayout(self)
         layout.addWidget(self.song_list)
         layout.addWidget(hint)
+        layout.addLayout(buttons)
 
         if not library.songs:
             layout.insertWidget(0, QLabel(strings.LIBRARY_NO_SONGS))

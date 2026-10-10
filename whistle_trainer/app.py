@@ -18,18 +18,24 @@ from PySide6.QtWidgets import (
 )
 
 from whistle_trainer import strings
+from whistle_trainer.audio.capture import AudioInput
+from whistle_trainer.audio.devices import AudioDevices
 from whistle_trainer.music.library import SongLibrary, load_songs
 from whistle_trainer.storage.progress import ProgressStore
 from whistle_trainer.storage.settings import SettingsStore
 from whistle_trainer.ui.pages.library import LibraryPage
+from whistle_trainer.ui.pages.setup import SetupPage
+from whistle_trainer.ui.pages.test_input import TestInputPage
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, library: SongLibrary, settings: SettingsStore, progress: ProgressStore):
+    def __init__(self, library: SongLibrary, settings: SettingsStore, progress: ProgressStore,
+                 devices: AudioDevices, audio: AudioInput):
         super().__init__()
         self.library = library
         self.settings = settings
         self.progress = progress
+        self.audio = audio
         self.setWindowTitle(strings.APP_NAME)
         self.resize(1000, 700)
 
@@ -42,6 +48,7 @@ class MainWindow(QMainWindow):
         self.title_label.setFont(title_font)
         self.listening_label = QLabel(f"● {strings.LISTENING}")
         self.listening_label.hide()
+        audio.running_changed.connect(self.set_listening)
 
         header = QHBoxLayout()
         header.addWidget(self.back_button)
@@ -51,8 +58,17 @@ class MainWindow(QMainWindow):
         self.pages = QStackedWidget()
         self.library_page = LibraryPage(library)
         self.library_page.song_selected.connect(self._on_song_selected)
-        self.pages.addWidget(self.library_page)
-        self.page_titles = {self.library_page: strings.PAGE_LIBRARY}
+        self.library_page.audio_setup_requested.connect(lambda: self.show_page(self.setup_page))
+        self.setup_page = SetupPage(devices, audio, settings)
+        self.setup_page.test_input_requested.connect(lambda: self.show_page(self.test_input_page))
+        self.test_input_page = TestInputPage(devices, audio, settings)
+        self.page_titles = {
+            self.library_page: strings.PAGE_LIBRARY,
+            self.setup_page: strings.PAGE_AUDIO_SETUP,
+            self.test_input_page: strings.PAGE_TEST_INPUT,
+        }
+        for page in self.page_titles:
+            self.pages.addWidget(page)
         self.history: list[QWidget] = []
 
         central = QWidget()
@@ -66,9 +82,15 @@ class MainWindow(QMainWindow):
             self.library_page.select_song(settings.settings.last_song_id)
 
     def show_page(self, page: QWidget, remember: bool = True) -> None:
-        if remember and self.pages.currentWidget() is not page:
-            self.history.append(self.pages.currentWidget())
+        current = self.pages.currentWidget()
+        if current is not page:
+            if remember:
+                self.history.append(current)
+            if hasattr(current, "deactivate"):
+                current.deactivate()
         self.pages.setCurrentWidget(page)
+        if hasattr(page, "activate"):
+            page.activate()
         self.title_label.setText(self.page_titles[page])
         self.back_button.setVisible(bool(self.history))
 
@@ -83,6 +105,9 @@ class MainWindow(QMainWindow):
         self.settings.settings.last_song_id = song_id
 
     def closeEvent(self, event) -> None:
+        current = self.pages.currentWidget()
+        if hasattr(current, "deactivate"):
+            current.deactivate()
         self.settings.save()
         self.progress.save()
         super().closeEvent(event)
@@ -103,8 +128,13 @@ def main(argv: list[str] | None = None) -> int:
         titles = ", ".join(library.get(song_id).title for song_id in changed)
         messages.append(strings.PROGRESS_SONG_CHANGED.format(titles=titles))
 
-    window = MainWindow(library, settings, progress)
+    devices = AudioDevices()
+    audio = AudioInput()
+    window = MainWindow(library, settings, progress, devices, audio)
     window.show()
     for message in messages:
         QTimer.singleShot(0, lambda m=message: QMessageBox.warning(window, strings.APP_NAME, m))
-    return app.exec()
+    try:
+        return app.exec()
+    finally:
+        audio.shutdown()

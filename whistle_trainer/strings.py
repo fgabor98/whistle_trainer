@@ -26,3 +26,71 @@ PROGRESS_RESET = (
     "The unreadable file was kept as {backup}."
 )
 PROGRESS_SONG_CHANGED = "Saved progress for these songs was reset because the songs have changed: {titles}"
+
+PAGE_AUDIO_SETUP = "Audio setup"
+PAGE_TEST_INPUT = "Test input"
+
+LIBRARY_AUDIO_SETUP = "Audio setup…"
+
+SETUP_INPUT = "Input:"
+SETUP_OUTPUT = "Output:"
+SETUP_ACTIVITY = "Activity:"
+SETUP_DETECTED = "Detected note:"
+SETUP_UNAVAILABLE = "{name} (not connected)"
+SETUP_SYSTEM_DEFAULT = "{name} (system default)"
+SETUP_NO_INPUTS = "No audio inputs were found. Connect a microphone."
+SETUP_START = "Start setup"
+SETUP_REPEAT = "Repeat setup"
+SETUP_MEASURE_RANGE = "Measure my range"
+SETUP_TEST_INPUT = "Test input"
+SETUP_INTRO = "Press Start setup to measure your room and your whistle. It takes about 10 seconds."
+SETUP_ALREADY_DONE = "This input is set up. Repeat setup any time, for example in a new room."
+SETUP_INPUT_MISSING = (
+    "The saved input “{name}” is not connected. Connect it, or choose another input. "
+    "The app never switches inputs on its own."
+)
+SETUP_INPUT_FAILED = (
+    "The input could not be opened. Check that it is connected and not in use, "
+    "then choose it again or press Start setup."
+)
+SETUP_INPUT_LOST = (
+    "The input stopped working. Check that it is connected, "
+    "then choose it again or press Start setup."
+)
+SETUP_STEP_SILENCE = "Stay quiet for a few seconds while the background sound is measured."
+SETUP_STEP_WHISTLE = "Now whistle one steady, comfortable note and hold it."
+SETUP_DONE = "Setup complete. Background {noise:.0f} dB, whistle {whistle:.0f} dB, activity threshold {threshold:.0f} dB."
+SETUP_NO_STEADY_WHISTLE = (
+    "No steady whistle was detected. Whistle closer to the microphone, check that the right input "
+    "is selected and its volume is not muted, then press Repeat setup."
+)
+SETUP_TOO_QUIET = (
+    "The whistle is too quiet compared with the background ({whistle:.0f} dB against {noise:.0f} dB). "
+    "Move closer to the microphone, raise the input volume, or reduce background noise, then press Repeat setup."
+)
+SETUP_RANGE_LOW = "Whistle your lowest comfortable note and hold it."
+SETUP_RANGE_HIGH = "Now whistle your highest comfortable note and hold it."
+SETUP_RANGE_DONE = "Your comfortable range is {low}–{high}. Songs can be transposed to fit it."
+SETUP_RANGE_FAILED = "Your range could not be measured. Whistle each note steadily for a second, then try again."
+SETUP_RANGE_SAVED = "Measured range: {low}–{high}."
+
+TEST_TARGET = "Target note:"
+TEST_DIFFICULTY = "Difficulty:"
+TEST_TRY_AGAIN = "Try again"
+TEST_TARGET_LABEL = "Whistle {note}"
+TEST_PASSED = "✓ Well done! Press Try again or choose another note."
+TEST_NOT_SET_UP = "Set up this input first on the Audio setup page."
+TEST_HOLD_LABEL = "Hold: {seconds:.1f} of {required:.1f} s"
+
+DIFFICULTY_NAMES = {"easy": "Easy", "standard": "Standard"}
+
+GUIDE_WHISTLE_HIGHER = "▲ Whistle higher"
+GUIDE_WHISTLE_LOWER = "▼ Whistle lower"
+GUIDE_HOLD = "● Hold this note"
+GUIDE_KEEP_GOING = "● Keep going"
+GUIDE_NO_CLEAR_PITCH = "No clear pitch"
+GUIDE_START_WHEN_READY = "Start whenever you are ready."
+
+DETECTED_NONE = "No clear pitch"
+DETECTED_NOTE = "{note} ({cents:+.0f} cents)"
+LEVEL_DB = "{level:.0f} dB"
