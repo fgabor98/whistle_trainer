@@ -71,3 +71,7 @@ SETUP_RANGE_NOTE_S = 1.0
 
 # Test input: required hold of the single target note.
 TEST_NOTE_HOLD_S = 1.0
+
+# Rhythm mode: the count-in starts this long after the latest analyzed frame,
+# leaving time to schedule the first clicks ahead of the output buffer.
+COUNT_IN_LEAD_S = 0.5

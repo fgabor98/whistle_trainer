@@ -98,7 +98,12 @@ LIBRARY_TEMPO = "Tempo:"
 LIBRARY_TEMPO_SUFFIX = " bpm"
 LIBRARY_DIFFICULTY = "Difficulty:"
 LIBRARY_MODE = "Mode:"
-LIBRARY_MODE_GUIDED = "Guided: the song waits for each note"
+MODE_NAMES = {"guided": "Guided", "rhythm": "Rhythm"}
+MODE_DESCRIPTIONS = {
+    "guided": "The song waits for you at every note.",
+    "rhythm": "After a count-in, the song keeps the beat. A mistake stops it, and you retry from there.",
+}
+LIBRARY_METRONOME = "Metronome sound (use headphones)"
 LIBRARY_START = "Start practice"
 LIBRARY_ESTIMATE = "About {length} at this tempo, not counting waiting and retries."
 
@@ -126,3 +131,14 @@ REST_LABEL = "Quiet: {seconds:.1f} of {required:.1f} s"
 
 GUIDE_TAKE_BREATH = "Take a breath"
 GUIDE_RELEASE = "Stop briefly, then whistle this note again"
+
+PRACTICE_RETRY = "Retry"
+GUIDE_COUNT_IN = "Get ready… {beat}"
+GUIDE_WHISTLE_NOW = "Whistle {note} now"
+RHYTHM_FAILED = {
+    "late_or_missing": "✗ {target} did not start on the beat. Start each note with the beat.",
+    "interrupted": "✗ {target} stopped or broke off too early. Hold each note for its full length.",
+    "too_short": "✗ {target} was not held on pitch long enough. Hold each note for its full length.",
+    "rest_not_quiet": "✗ The rest was not quiet. Stay silent during rests.",
+}
+RHYTHM_RETRY_HINT = "Press Retry to start again from this note with a new count-in."

@@ -80,7 +80,10 @@ Press **Try again** to repeat, or choose another note.
 
 Select a song and press **Start practice** (or double-click the song). The microphone must be set up first; if it is not, the page explains this and offers **Audio setup…**.
 
-The app currently has one mode, **Guided**: the song waits for you at every note.
+Choose a **Mode** in the preparation panel:
+
+- **Guided:** the song waits for you at every note.
+- **Rhythm:** after a count-in, the song keeps the beat (see below).
 
 - The score shows the melody with note names. The current note is highlighted, and completed notes are marked with ✓. Notes are drawn an octave lower than they sound, as is usual for whistle and piccolo music; the names show the real pitch.
 - Whistle the highlighted note and hold it for its written length at the chosen tempo. At 60 bpm a quarter note is 1 second, a half note 2 seconds, and a whole note 4 seconds. The bar shows how long you have held it.
@@ -90,7 +93,20 @@ The app currently has one mode, **Guided**: the song waits for you at every note
 - **Tied notes** (joined by a curve) are one long note: hold them together without a break.
 - A short break in a note (under a tenth of a second) pauses the bar; a longer break starts that note again and counts as a retry.
 
-**Pause** stops listening and starts the current note over when you press **Resume**. **Restart song** goes back to the beginning. If the microphone is unplugged, practice pauses and never resumes by itself. At the end, the app shows your active practice time and number of retries, with **Repeat** and **Library** buttons.
+In both modes, **Pause** stops listening and starts the current note over when you press **Resume**. **Restart song** goes back to the beginning. If the microphone is unplugged, practice pauses and never resumes by itself. At the end, the app shows your active practice time and number of retries, with **Repeat** and **Library** buttons.
+
+### Rhythm mode
+
+Rhythm mode is for practicing in time. After a four-beat count-in ("Get ready… 1, 2, 3, 4" and dots for each beat), the song moves on with the beat whether or not you are ready:
+
+- Start each note on its beat. You have a little leeway: up to a fifth of the note's length early or late, and at most 0.15 seconds.
+- Hold each note for at least 80 percent of its length. You may let go a little early, for example to breathe before the next note.
+- Stay quiet during rests.
+- Repeated notes need a fresh start: stop briefly between them.
+
+If something goes wrong, the song stops at that note, marks it with ✗, and says what happened. Press **Retry** to count in again from that note; notes you already played stay completed. Pausing also leads to a new count-in when you resume.
+
+Tick **Metronome sound (use headphones)** in the preparation panel to hear a click on every beat, with a higher click on beat one. The beat dots work without sound, and the clicks are best heard through headphones so the microphone does not pick them up.
 
 ## Your data
 

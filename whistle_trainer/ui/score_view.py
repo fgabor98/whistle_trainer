@@ -31,6 +31,7 @@ STEM_THICKNESS = 0.12
 STAFF_LINE_THICKNESS = 0.13
 LEDGER_EXTENSION = 0.4
 CHECK_MARK = "✓"
+CROSS_MARK = "✗"
 
 
 def music_font_family() -> str:
@@ -54,6 +55,7 @@ class ScoreView(QWidget):
         self.layout_data: ScoreLayout | None = None
         self.current: int | None = None
         self.completed: set[int] = set()
+        self.failed: int | None = None
         self.show_note_names = True
         self.scroll = 0.0
         self._animation = QVariantAnimation(self)
@@ -73,9 +75,15 @@ class ScoreView(QWidget):
         self.layout_data = layout_song(song)
         self.show_note_names = show_note_names
         self.completed = set()
+        self.failed = None
         self.current = None
         self.scroll = 0.0
         self.update()
+
+    def set_failed(self, index: int | None) -> None:
+        if index != self.failed:
+            self.failed = index
+            self.update()
 
     def set_completed(self, completed: set[int]) -> None:
         self.completed = set(completed)
@@ -187,12 +195,13 @@ class ScoreView(QWidget):
                 painter.setPen(highlight if index == self.current else done if index in self.completed else text)
                 rect = QRectF(self.x_for(event.left) - sp, self.y_for(-6), (event.right - event.left + 2) * sp, 2 * sp)
                 painter.drawText(rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, event.label)
-            if index in self.completed:
-                label_font.setBold(False)
+            if index in self.completed or index == self.failed:
+                label_font.setBold(index == self.failed)
                 painter.setFont(label_font)
-                painter.setPen(done)
+                painter.setPen(highlight if index == self.failed else done)
                 rect = QRectF(self.x_for(event.left), self.y_for(16), (event.right - event.left) * sp, 2 * sp)
-                painter.drawText(rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom, CHECK_MARK)
+                mark = CROSS_MARK if index == self.failed else CHECK_MARK
+                painter.drawText(rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom, mark)
 
     def _draw_final_barline(self, painter: QPainter, color: QColor, x: float) -> None:
         sp = self.space

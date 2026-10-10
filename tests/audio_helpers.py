@@ -49,13 +49,21 @@ class FrameScript:
 
     def __init__(self):
         self.frames: list[AnalysisFrame] = []
-        self.time = 0.0
+        self._count = 0  # frame times are computed from a count, so they do not drift
+
+    @property
+    def time(self) -> float:
+        return round(self._count * HOP, 9)
+
+    @time.setter
+    def time(self, value: float) -> None:
+        self._count = round(value / HOP)
 
     def _add(self, seconds: float, frame_class: FrameClass, hz: float | None, level: float) -> FrameScript:
         for _ in range(round(seconds / HOP)):
             confidence = 0.95 if frame_class is FrameClass.PITCHED else 0.3
             self.frames.append(AnalysisFrame(self.time, level, hz, confidence, frame_class))
-            self.time += HOP
+            self._count += 1
         return self
 
     def pitched(self, hz: float, seconds: float) -> FrameScript:

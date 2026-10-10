@@ -37,7 +37,7 @@ whistle_trainer/
     devices.py           Input/output device listing and monitoring
     capture.py           Capture and analysis worker thread
     playback.py          Output stream, mixer, scheduled sounds
-    synth.py             Whistle tone and metronome click synthesis
+    synth.py             Metronome click (and, from milestone 5, whistle tone) synthesis
   pitch/
     yin.py               YIN pitch estimator
     bandpass.py          Streaming FIR band-pass filter
@@ -49,8 +49,6 @@ whistle_trainer/
     hold.py              Hold tracking for one target note (shared by the engines)
     guided.py            Guided mode engine
     rhythm.py            Continuous rhythm mode engine
-    session.py           Drives an engine, owns position, retries, pause/resume (with rhythm mode;
-                         until then the practice page drives the guided engine)
   storage/
     jsonfile.py          Atomic JSON writes and unreadable-file recovery
     settings.py          Settings persistence
@@ -80,7 +78,7 @@ pyproject.toml           Project metadata and pytest settings
 The app has four layers, and dependencies only point downward:
 
 1. **UI** (`ui/`, `app.py`): Qt widgets and pages. Holds no assessment logic.
-2. **Session** (`assessment/session.py`, Listen player): coordinates a practice or listening session, exposes Qt signals to the UI.
+2. **Session** (the practice page's session control, and the Listen player from milestone 5): starts and stops capture and playback, feeds frames to the engine for the chosen mode, schedules the count-in and metronome, and handles pause, retry, restart, and input loss. A separate session module was planned, but with two modes the page's session control stayed small enough to keep in one place.
 3. **Engines** (`assessment/guided.py`, `assessment/rhythm.py`, `pitch/`, `music/`): pure Python with no Qt or audio-device dependencies. Fully testable with synthetic input.
 4. **I/O** (`audio/`, `storage/`): devices and files.
 
@@ -95,7 +93,7 @@ Engines run on the main thread. This does not affect accuracy: assessment depend
 
 ### Clock
 
-Assessment time is the capture clock: the number of samples received since capture started, divided by the sample rate. Each analysis frame's timestamp is the time of its window's center sample, corrected for the band-pass filter's delay. Rhythm schedules and visual beats are expressed on this clock. Qt Multimedia provides no hardware timestamps, so output sounds (milestone 4 onward) are aligned by mapping the sink's processed-sample count to the capture clock when both start. Engines never read the system clock themselves; they only use frame timestamps, which makes them deterministic in tests.
+Assessment time is the capture clock: the number of samples received since capture started, divided by the sample rate. Each analysis frame's timestamp is the time of its window's center sample, corrected for the band-pass filter's delay. Rhythm schedules and visual beats are expressed on this clock. Qt Multimedia provides no hardware timestamps, so the capture clock is related to the system's monotonic clock: on each read, the capture worker computes `monotonic now − samples received / rate` and keeps the smallest value seen since capture started (samples only ever arrive late, so the smallest offset is the best estimate). Visual beats convert the monotonic time to the capture clock with this offset, and metronome clicks are scheduled at `beat time + offset` on the output (see Playback service). Engines never read the system clock themselves; they only use frame timestamps, which makes them deterministic in tests.
 
 ## Audio input and analysis
 
@@ -243,14 +241,18 @@ On start, the engine builds a schedule: four count-in beats, then each event `i`
 Per note event:
 
 - **Onset window:** `w = min(0.2 × duration, 150 ms)`. Input before `s_0 − w` is ignored (warm-up).
-- **Onset:** the start time of the first accepted run that completes stable confirmation (back-dated to the run's first frame). The event fails as "late or missing start" if no onset falls inside `[s_i − w, s_i + w]`, as soon as `s_i + w` passes without one.
+- **Onset:** the start time of the first accepted run that completes stable confirmation (back-dated to the run's first frame). The event fails as "late or missing start" if no onset falls inside `[s_i − w, s_i + w]`, as soon as `s_i + w` passes without one. Runs for the next note are tracked from the moment the current note begins, so a sound that started before the window, such as a held repeated note, is never mistaken for an onset.
 - **Credit:** only accepted time inside `[s_i, e_i]` counts. Early pitch establishes the onset but earns no credit.
 - **Interruption failure:** after the onset and until credit reaches 80 percent of the duration, an interruption longer than the grace period fails the event as "note interrupted". After reaching 80 percent, the user may release early without penalty, which also leaves time for the release before a repeated note.
 - **Result:** at `e_i`, the event passes if credit is at least 80 percent of the duration; otherwise it fails as "note too short". Passing never happens before `e_i`.
 
-Rest events pass at `e_i` if quiet credit inside the interval is at least 80 percent and no active or unclear stretch exceeded the grace period; otherwise they fail as "rest not quiet".
+Rest events pass at `e_i` if quiet credit inside the interval is at least 80 percent and no active or unclear stretch exceeded the grace period; otherwise they fail as "rest not quiet". Frames inside the next note's early onset window that match the next note's pitch count as quiet. Without this, starting the next note early, which its onset window allows, would fail the rest before it.
 
-On failure, the engine stops, the beat stops, and the session shows the reason with Retry. Retry rebuilds the schedule from the failed event with a new count-in.
+Failure reasons and their messages: "late or missing start", "note interrupted" (a break longer than the grace period before 80 percent, which includes stopping too early), "note too short" (less than 80 percent without one long break, for example many short breaks or wavering pitch), and "rest not quiet".
+
+On failure, the engine stops, the beat and clicks stop, the failed event is marked with ✗, and the page shows the reason with Retry. Capture keeps running. Retry rebuilds the schedule from the failed event with a new count-in. Failures are counted per event, as retries.
+
+The count-in starts `COUNT_IN_LEAD_S` (0.5 s) after the latest frame received when listening starts, after Resume, or after Retry. This leaves time to schedule the first clicks ahead of the output buffer. Pausing stops the beat; resuming always uses a new count-in.
 
 ### Reference playback and self-hearing protection
 
@@ -274,7 +276,7 @@ The metronome click is a 20 ms decaying burst at 2 kHz for beat one and 1.5 kHz 
 
 ### Playback service
 
-A single `QAudioSink` on the selected output device (default: system default) mixes scheduled sounds. Sounds are queued with a start time on the shared clock; the service reports the actual start time of each played note so the UI can keep the highlight in sync. Stopping clears the queue with a 10 ms fade-out to avoid clicks.
+A single `QAudioSink` on the selected output device (default: system default) in push mode, with a requested 40 ms buffer. A 5 ms timer keeps the buffer full, writing silence when nothing is scheduled, so the output position advances steadily. A sound scheduled for monotonic time `T` is placed at output sample `processed + (T − now) × rate`, where `processed` comes from `processedUSecs()`; a sound that is already too late plays as soon as possible. Overlapping sounds are mixed and clipped to ±1. In milestone 4 the service plays the metronome; it is opened only in rhythm mode with the metronome sound enabled, and closed when practice stops, pauses, or finishes. Measured on the reference system, the written position stays 20 to 40 ms ahead of what has been played. Listen mode adds note playback and a highlight synchronized to it.
 
 ### Listen mode player
 
@@ -290,11 +292,11 @@ A single `QMainWindow` with a `QStackedWidget`:
 
 | Page | Notes |
 | --- | --- |
-| Library | Song list with length, range, and progress; preparation panel with mode, tempo, difficulty, transposition (with suggestion), Listen, Start, and Audio setup. The introductory exercise is listed first. |
+| Library | Song list with length, range, and progress; preparation panel with mode (Guided or Rhythm, with a one-line description), metronome sound option (rhythm mode, saved globally), tempo, difficulty, transposition (with suggestion), Listen, Start, and Audio setup. The introductory exercise is listed first. |
 | Audio setup | Input and output selectors, live level meter, detected note, step-by-step calibration with status text, Measure my range, and Test input. |
 | Test input | Whistle one selectable target note (C5 to C7, default the middle of the measured range, else B5) with the detected note, pitch meter, hold indicator for a 1-second hold, guidance text, and Try again. Uses the guided-mode hold rules. |
 | Listen | Score view and Listen controls. |
-| Practice | Song title as page title, "Note n of m", score view, target note and octave (or "Rest"), detected note, pitch meter, hold indicator ("Hold" or "Quiet"), guidance, beat indicator (rhythm), and controls: Pause/Resume and Restart song; Audio setup when the input is missing or lost; Repeat and Library when the song is complete. Listening starts when a song is started from the library. Returning to the page (for example from Audio setup) stays paused until Resume. Hear target note is added with sound output in milestone 5. |
+| Practice | Song title as page title, "Note n of m", score view, target note and octave (or "Rest"), detected note, pitch meter, hold indicator ("Hold" or "Quiet"; in rhythm mode against the 80 percent requirement), guidance ("Get ready… n" during the count-in, "Whistle G5 now" in rhythm mode), beat indicator (rhythm), and controls: Pause/Resume and Restart song; Retry after a rhythm failure; Audio setup when the input is missing or lost; Repeat and Library when the song is complete. Listening starts when a song is started from the library. Returning to the page (for example from Audio setup) stays paused until Resume. Hear target note is added with sound output in milestone 5. |
 | Summary | Results from the session and Repeat, Restart, Library. |
 
 A header bar shows the page title, a Back button, and the listening indicator whenever capture is active.
@@ -314,7 +316,7 @@ A header bar shows the page title, a Back button, and the listening indicator wh
 
 - **Pitch meter:** horizontal scale of ±100 cents around the target, with the tolerance band shaded and a marker for the current pitch; arrow and text "Whistle higher" or "Whistle lower" outside the band.
 - **Hold indicator:** progress bar filling with credited time; frozen during grace interruptions, with the text "Keep going" while frozen.
-- **Beat indicator:** four dots pulsing on the beat; count-in numbers shown large.
+- **Beat indicator:** one dot per beat of the measure; the current beat is filled and enlarged, refreshed every 20 ms from the capture clock. The count-in beat number is shown in the guidance ("Get ready… 3"). The dots go blank when the beat stops.
 
 ### Keyboard shortcuts
 

@@ -50,6 +50,19 @@ Checks that need a real microphone and a real whistle. Run them on the reference
 9. Practice **Ode to Joy** and **Frère Jacques** to the end: the completion message shows practice time and retries.
 10. Unplug the microphone during practice: practice pauses with an explanation and does not resume by itself.
 
+## Milestone 4: rhythm mode
+
+1. In the library, choose **Rhythm** for a song: the description changes and the **Metronome sound** option appears. Both choices are remembered.
+2. Start the **Introductory exercise** in rhythm mode at 60 bpm without the metronome sound. The beat dots and "Get ready… 1, 2, 3, 4" count in, then the song follows the beat.
+3. Whistle each note on the beat: the song continues without waiting, and completed notes get ✓.
+4. Start a note clearly late (about half a beat): the song stops at that note, marks it ✗, and explains "did not start on the beat". **Retry** counts in again from that note, and earlier notes stay completed.
+5. Whistle during a rest: the song stops with "The rest was not quiet".
+6. Hold a repeated note through without a break: the second note fails as not started on the beat.
+7. With headphones, enable **Metronome sound**: clicks are heard on every beat, higher on beat one, and they line up with the beat dots and with when the app expects each note. Note any delay you hear between the click and the dots.
+8. Try the metronome sound through speakers: clicks leaking into the microphone should not fail notes or rests.
+9. **Pause** during rhythm practice: the beat and clicks stop; **Resume** starts with a new count-in.
+10. Try 30 bpm and 120 bpm on Frère Jacques (eighth notes): note whether the timing windows feel fair.
+
 ## Results
 
 | Date | Microphone | Room | Background / whistle / threshold (dB) | Range | Notes |

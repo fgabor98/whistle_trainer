@@ -1,11 +1,12 @@
 import pytest
 
 from audio_helpers import FrameScript
-from fakes import BUILTIN, MIC, FakeAudio, FakeDevices
+from fakes import BUILTIN, MIC, SPEAKERS, FakeAudio, FakeClock, FakeDevices, FakePlayback
 from whistle_trainer import config, strings
 from whistle_trainer.app import MainWindow
 from whistle_trainer.audio.capture import InputProblem
-from whistle_trainer.config import Difficulty
+from whistle_trainer.config import Difficulty, Mode
+from whistle_trainer.assessment.rhythm import RhythmStatus
 from whistle_trainer.music.library import load_songs
 from whistle_trainer.storage.progress import ProgressStore
 from whistle_trainer.storage.settings import Calibration, SettingsStore
@@ -30,8 +31,13 @@ def audio():
 
 
 @pytest.fixture
-def window(qtbot, tmp_path, settings, devices, audio):
-    window = MainWindow(load_songs(), settings, ProgressStore(tmp_path / "progress.json"), devices, audio)
+def playback():
+    return FakePlayback()
+
+
+@pytest.fixture
+def window(qtbot, tmp_path, settings, devices, audio, playback):
+    window = MainWindow(load_songs(), settings, ProgressStore(tmp_path / "progress.json"), devices, audio, playback)
     qtbot.addWidget(window)
     return window
 
@@ -49,9 +55,9 @@ def test_library_lists_bundled_songs(window):
     assert song_list.topLevelItem(0).text(2) == "G5–B5"
 
 
-def test_last_song_is_selected_and_remembered(qtbot, tmp_path, settings, devices, audio):
+def test_last_song_is_selected_and_remembered(qtbot, tmp_path, settings, devices, audio, playback):
     settings.settings.last_song_id = "ode-to-joy"
-    window = MainWindow(load_songs(), settings, ProgressStore(tmp_path / "progress.json"), devices, audio)
+    window = MainWindow(load_songs(), settings, ProgressStore(tmp_path / "progress.json"), devices, audio, playback)
     qtbot.addWidget(window)
     song_list = window.library_page.song_list
     assert song_list.currentItem().text(0) == "Ode to Joy"
@@ -352,3 +358,147 @@ def test_missing_microphone_blocks_practice(window, audio, devices, settings):
     assert page.state is PracticeState.BLOCKED
     assert page.guide_label.text() == strings.PRACTICE_INPUT_MISSING.format(name=MIC.name)
     assert not audio.running
+
+
+
+# Rhythm mode
+
+C6 = 1046.50
+
+
+def start_rhythm(window, settings, song_id="introductory-exercise", tempo=60, metronome=False):
+    calibrate(settings, MIC)
+    settings.settings.metronome_sound = metronome
+    settings.settings.output_device = SPEAKERS.id
+    page = window.library_page
+    page.select_song(song_id)
+    page.mode_combo.setCurrentIndex(page.mode_combo.findData(Mode.RHYTHM))
+    page.tempo_spin.setValue(tempo)
+    page.start_button.click()
+    return window.practice_page
+
+
+def test_library_mode_choice_is_saved_and_shows_metronome_option(window, settings):
+    page = window.library_page
+    page.select_song("ode-to-joy")
+    assert page.mode_combo.currentData() == Mode.GUIDED
+    assert not page.metronome_check.isVisibleTo(page)
+    page.mode_combo.setCurrentIndex(page.mode_combo.findData(Mode.RHYTHM))
+    assert settings.settings.song_preferences["ode-to-joy"].mode is Mode.RHYTHM
+    assert page.mode_description.text() == strings.MODE_DESCRIPTIONS["rhythm"]
+    assert page.metronome_check.isVisibleTo(page)
+    page.metronome_check.setChecked(True)
+    assert settings.settings.metronome_sound is True
+
+
+def test_rhythm_count_in_starts_with_first_frames(window, audio, settings):
+    practice = start_rhythm(window, settings)
+    assert practice.rhythm is not None and practice.rhythm.status is RhythmStatus.IDLE
+    assert practice.beat_indicator.isVisibleTo(practice)
+    assert practice.guide_label.text() == strings.GUIDE_COUNT_IN.format(beat=1)
+    audio.send(FrameScript().quiet(0.05).frames)
+    # The count-in begins half a second after the latest frame.
+    assert practice.rhythm.status is RhythmStatus.COUNT_IN
+    assert practice.rhythm.beat_times()[0] == pytest.approx(0.04 + config.COUNT_IN_LEAD_S)
+
+
+def rhythm_intro_frames(start: float) -> FrameScript:
+    """The introductory exercise at 60 bpm, starting with the first note at `start`."""
+    script = FrameScript().quiet(start)
+    return (script.pitched(G5, 3.8).quiet(0.2)  # whole note
+            .pitched(A5, 1.9).quiet(2.1)  # half note, half rest
+            .pitched(B5_HZ, 1.8).quiet(0.2).pitched(B5_HZ, 1.9).quiet(0.1)  # repeated half notes
+            .pitched(A5, 1.0).pitched(G5, 1.0).pitched(A5, 1.0).pitched(B5_HZ, 0.85).quiet(0.15)
+            .pitched(B5_HZ, 2.0).pitched(A5, 3.8).quiet(2.2)  # half, tied half + half, half rest
+            .pitched(G5, 3.9).quiet(0.3))
+
+
+def test_rhythm_full_song_with_metronome(window, audio, playback, settings):
+    practice = start_rhythm(window, settings, metronome=True)
+    assert playback.running and playback.device == SPEAKERS
+    audio.send(FrameScript().quiet(0.01).frames)
+    beats = practice.rhythm.beat_times()
+    first = practice.rhythm.event_times(0)[0]
+    # One click per beat: four count-in beats and 28 beats of music; beat one is accented.
+    assert len(playback.scheduled) == len(beats) == 32
+    assert [at for at, _ in playback.scheduled] == pytest.approx(beats)
+    accents = [practice.rhythm.beat_in_measure(i) == 0 for i in range(len(beats))]
+    assert accents[:5] == [True, False, False, False, True]
+
+    script = rhythm_intro_frames(first)
+    script.frames = [f for f in script.frames if f.time > 0.005]
+    audio.send(script.frames)
+    assert practice.state is PracticeState.FINISHED, practice.guide_label.text()
+    assert practice.retries == 0 and not playback.running and not audio.running
+
+
+def test_rhythm_failure_offers_retry_and_keeps_successes(window, audio, playback, settings, qtbot):
+    practice = start_rhythm(window, settings, metronome=True)
+    audio.send(FrameScript().quiet(0.01).frames)
+    first = practice.rhythm.event_times(0)[0]
+    script = FrameScript().quiet(first).pitched(G5, 3.8).quiet(0.2).quiet(1.0)  # A5 missed
+    script.frames = [f for f in script.frames if f.time > 0.005]
+    audio.send(script.frames)
+    assert practice.rhythm.status is RhythmStatus.FAILED
+    assert practice.rhythm.position == 1 and practice.rhythm.completed == {0}
+    assert practice.score.failed == 1
+    assert practice.retry_button.isVisibleTo(practice)
+    assert practice.guide_label.text().startswith(strings.RHYTHM_FAILED["late_or_missing"].format(target="A5"))
+    assert playback.scheduled == [] and audio.running
+
+    practice.retry_button.click()
+    assert practice.score.failed is None and not practice.retry_button.isVisibleTo(practice)
+    retry = FrameScript()
+    retry.time = script.time
+    audio.send(retry.quiet(0.05).frames)
+    assert practice.rhythm.status is RhythmStatus.COUNT_IN
+    assert practice.rhythm.event_times(1)[0] == pytest.approx(script.time + 0.04 + config.COUNT_IN_LEAD_S + 4.0)
+    assert len(playback.scheduled) == 4 + 24  # count-in, then bars 2 to 7
+    assert practice.retries == 1
+
+
+def test_rhythm_pause_needs_new_count_in(window, audio, settings):
+    practice = start_rhythm(window, settings)
+    audio.send(FrameScript().quiet(0.05).frames)
+    practice.pause_button.click()
+    assert practice.rhythm.status is RhythmStatus.IDLE and not audio.running
+    practice.pause_button.click()
+    assert audio.running and practice.rhythm.status is RhythmStatus.IDLE
+    audio.send(FrameScript().quiet(0.05).frames)
+    assert practice.rhythm.status is RhythmStatus.COUNT_IN
+
+
+def test_rhythm_without_metronome_sound_does_not_open_output(window, audio, playback, settings):
+    start_rhythm(window, settings, metronome=False)
+    audio.send(FrameScript().quiet(0.05).frames)
+    assert not playback.running and playback.scheduled == []
+
+
+def test_rhythm_visual_beats_follow_the_clock(window, audio, settings):
+    clock = FakeClock()
+    window.practice_page.clock = clock
+    practice = start_rhythm(window, settings)
+    audio.send(FrameScript().quiet(0.05).frames)
+    start = practice.rhythm.beat_times()[0]
+    clock.now = start + 2.5  # third count-in beat
+    practice._update()
+    assert practice.guide_label.text() == strings.GUIDE_COUNT_IN.format(beat=3)
+    assert practice.beat_indicator.current == 2
+    clock.now = start + 4.2  # first beat of the song
+    practice._update()
+    assert practice.beat_indicator.current == 0
+
+
+def test_rhythm_beats_stop_after_a_failure(window, audio, settings):
+    clock = FakeClock()
+    window.practice_page.clock = clock
+    practice = start_rhythm(window, settings)
+    audio.send(FrameScript().quiet(0.05).frames)
+    first = practice.rhythm.event_times(0)[0]
+    script = FrameScript()
+    script.time = 0.05
+    audio.send(script.quiet(first + 0.3 - 0.05).frames)  # the first note never starts
+    assert practice.rhythm.status is RhythmStatus.FAILED
+    clock.now = first + 0.3
+    practice._update()
+    assert practice.beat_indicator.current is None

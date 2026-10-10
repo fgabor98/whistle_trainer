@@ -151,3 +151,35 @@ class HoldIndicator(QProgressBar):
                      label: str = strings.HOLD_LABEL) -> None:
         self.setValue(round(min(max(fraction, 0.0), 1.0) * 1000))
         self.setFormat(label.format(seconds=seconds, required=required))
+
+
+class BeatIndicator(QWidget):
+    """One dot per beat of the measure; the current beat is filled and enlarged."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.beats = 4
+        self.current: int | None = None  # 0-based beat in the measure
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+    def sizeHint(self) -> QSize:
+        return QSize(200, 28)
+
+    def set_beat(self, current: int | None, beats: int) -> None:
+        if (current, beats) != (self.current, self.beats):
+            self.current, self.beats = current, beats
+            self.update()
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        palette = self.palette()
+        spacing = 28.0
+        left = self.width() / 2 - spacing * (self.beats - 1) / 2
+        y = self.height() / 2
+        for beat in range(self.beats):
+            active = beat == self.current
+            radius = 9.0 if active else 5.0
+            painter.setPen(palette.color(QPalette.ColorRole.Mid))
+            painter.setBrush(_highlight(self) if active else palette.color(QPalette.ColorRole.Base))
+            painter.drawEllipse(QPointF(left + beat * spacing, y), radius, radius)

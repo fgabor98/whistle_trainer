@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFormLayout,
     QGroupBox,
@@ -19,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from whistle_trainer import config, strings
-from whistle_trainer.config import Difficulty
+from whistle_trainer.config import Difficulty, Mode
 from whistle_trainer.music.library import SongLibrary
 from whistle_trainer.music.model import Song
 from whistle_trainer.music.timing import song_seconds
@@ -75,8 +76,15 @@ class LibraryPage(QWidget):
         title_font.setBold(True)
         self.song_title.setFont(title_font)
         self.song_title.setWordWrap(True)
-        self.mode_label = QLabel(strings.LIBRARY_MODE_GUIDED)
-        self.mode_label.setWordWrap(True)
+        self.mode_combo = QComboBox()
+        for mode in Mode:
+            self.mode_combo.addItem(strings.MODE_NAMES[mode], mode)
+        self.mode_combo.currentIndexChanged.connect(self._on_preferences_changed)
+        self.mode_description = QLabel()
+        self.mode_description.setWordWrap(True)
+        self.metronome_check = QCheckBox(strings.LIBRARY_METRONOME)
+        self.metronome_check.setChecked(settings.settings.metronome_sound)
+        self.metronome_check.toggled.connect(self._on_metronome_toggled)
         self.tempo_spin = QSpinBox()
         self.tempo_spin.setRange(config.MIN_TEMPO, config.MAX_TEMPO)
         self.tempo_spin.setSuffix(strings.LIBRARY_TEMPO_SUFFIX)
@@ -94,13 +102,15 @@ class LibraryPage(QWidget):
         self.audio_setup_button.clicked.connect(self.audio_setup_requested)
 
         form = QFormLayout()
-        form.addRow(strings.LIBRARY_MODE, self.mode_label)
+        form.addRow(strings.LIBRARY_MODE, self.mode_combo)
         form.addRow(strings.LIBRARY_TEMPO, self.tempo_spin)
         form.addRow(strings.LIBRARY_DIFFICULTY, self.difficulty_combo)
         panel = QGroupBox()
         panel_layout = QVBoxLayout(panel)
         panel_layout.addWidget(self.song_title)
         panel_layout.addLayout(form)
+        panel_layout.addWidget(self.mode_description)
+        panel_layout.addWidget(self.metronome_check)
         panel_layout.addWidget(self.estimate_label)
         panel_layout.addWidget(self.start_button)
         panel_layout.addStretch()
@@ -141,30 +151,45 @@ class LibraryPage(QWidget):
     def _on_current_changed(self, current: QTreeWidgetItem | None, _previous) -> None:
         self.song = self.library.get(current.data(0, Qt.ItemDataRole.UserRole)) if current else None
         preferences = self.preferences()
-        for widget in (self.tempo_spin, self.difficulty_combo, self.start_button):
+        for widget in (self.mode_combo, self.tempo_spin, self.difficulty_combo, self.start_button):
             widget.setEnabled(self.song is not None)
         if self.song is None:
             self.song_title.setText("")
             self.estimate_label.setText("")
             return
         self.song_title.setText(self.song.title)
-        for widget in (self.tempo_spin, self.difficulty_combo):
+        widgets = (self.mode_combo, self.tempo_spin, self.difficulty_combo)
+        for widget in widgets:
             widget.blockSignals(True)
+        self.mode_combo.setCurrentIndex(self.mode_combo.findData(preferences.mode))
         self.tempo_spin.setValue(preferences.tempo)
         self.difficulty_combo.setCurrentIndex(self.difficulty_combo.findData(preferences.difficulty))
-        for widget in (self.tempo_spin, self.difficulty_combo):
+        for widget in widgets:
             widget.blockSignals(False)
         self._update_estimate()
+        self._update_mode()
         self.song_selected.emit(self.song.id)
 
     def _on_preferences_changed(self) -> None:
         preferences = self.preferences()
         if preferences is None:
             return
+        # Qt returns combo box data as plain strings.
+        preferences.mode = Mode(self.mode_combo.currentData())
         preferences.tempo = self.tempo_spin.value()
-        preferences.difficulty = self.difficulty_combo.currentData()
+        preferences.difficulty = Difficulty(self.difficulty_combo.currentData())
         self.store.save()
         self._update_estimate()
+        self._update_mode()
+
+    def _on_metronome_toggled(self, checked: bool) -> None:
+        self.store.settings.metronome_sound = checked
+        self.store.save()
+
+    def _update_mode(self) -> None:
+        mode = Mode(self.mode_combo.currentData())
+        self.mode_description.setText(strings.MODE_DESCRIPTIONS[mode])
+        self.metronome_check.setVisible(mode is Mode.RHYTHM)
 
     def _update_estimate(self) -> None:
         length = format_length(song_seconds(self.song, self.tempo_spin.value()))

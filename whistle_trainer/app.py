@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from whistle_trainer import strings
 from whistle_trainer.audio.capture import AudioInput
 from whistle_trainer.audio.devices import AudioDevices
+from whistle_trainer.audio.playback import Playback
 from whistle_trainer.music.library import SongLibrary, load_songs
 from whistle_trainer.storage.progress import ProgressStore
 from whistle_trainer.storage.settings import SettingsStore
@@ -31,7 +32,7 @@ from whistle_trainer.ui.pages.test_input import TestInputPage
 
 class MainWindow(QMainWindow):
     def __init__(self, library: SongLibrary, settings: SettingsStore, progress: ProgressStore,
-                 devices: AudioDevices, audio: AudioInput):
+                 devices: AudioDevices, audio: AudioInput, playback: Playback):
         super().__init__()
         self.library = library
         self.settings = settings
@@ -64,7 +65,7 @@ class MainWindow(QMainWindow):
         self.setup_page = SetupPage(devices, audio, settings)
         self.setup_page.test_input_requested.connect(lambda: self.show_page(self.test_input_page))
         self.test_input_page = TestInputPage(devices, audio, settings)
-        self.practice_page = PracticePage(devices, audio, settings)
+        self.practice_page = PracticePage(devices, audio, playback, settings)
         self.practice_page.audio_setup_requested.connect(lambda: self.show_page(self.setup_page))
         self.practice_page.library_requested.connect(self.show_library)
         self.page_titles = {
@@ -146,11 +147,13 @@ def main(argv: list[str] | None = None) -> int:
 
     devices = AudioDevices()
     audio = AudioInput()
-    window = MainWindow(library, settings, progress, devices, audio)
+    playback = Playback()
+    window = MainWindow(library, settings, progress, devices, audio, playback)
     window.show()
     for message in messages:
         QTimer.singleShot(0, lambda m=message: QMessageBox.warning(window, strings.APP_NAME, m))
     try:
         return app.exec()
     finally:
+        playback.stop()
         audio.shutdown()

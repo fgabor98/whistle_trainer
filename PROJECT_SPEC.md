@@ -74,7 +74,7 @@ Each note must start within the onset window and contain accepted pitch for at l
 
 Short dropouts receive the same grace period as guided mode and earn no credit. A longer interruption fails the event even if total accepted time would be sufficient. Meeting the hold threshold early does not advance early: successful events complete at their scheduled boundary.
 
-Rests require quiet input for at least 80 percent of their scheduled interval, without any active or unclear interruption longer than the grace period. They have no onset requirement. Repeated-note articulation and ties follow the shared rules above.
+Rests require quiet input for at least 80 percent of their scheduled interval, without any active or unclear interruption longer than the grace period. They have no onset requirement. Starting the next note early, within its onset window, does not fail the rest before it. Repeated-note articulation and ties follow the shared rules above.
 
 A missing or wrongly timed onset, insufficient hold, excessive interruption, or failed rest stops the beat at the failed event. Preserve prior successes, explain the problem, and offer Retry with a fresh count-in. Tempo does not adjust automatically. A mode that runs through mistakes and grades the entire performance is outside this version.
 

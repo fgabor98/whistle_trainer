@@ -44,6 +44,7 @@ class FakeAudio(QObject):
         self.device_id = None
         self.threshold_db = None
         self.starts: list[str] = []
+        self.capture_offset: float | None = 0.0  # capture time equals the fake clock
 
     def start(self, device: DeviceInfo, threshold_db: float) -> None:
         self.device_id = device.id
@@ -71,3 +72,34 @@ class FakeAudio(QObject):
         if running != self.running:
             self.running = running
             self.running_changed.emit(running)
+
+
+class FakePlayback:
+    rate = config.SAMPLE_RATE
+
+    def __init__(self):
+        self.running = False
+        self.device = None
+        self.scheduled: list[tuple[float, object]] = []  # (time, samples)
+
+    def start(self, device) -> bool:
+        self.running, self.device = True, device
+        return True
+
+    def stop(self) -> None:
+        self.running = False
+        self.scheduled.clear()
+
+    def clear(self) -> None:
+        self.scheduled.clear()
+
+    def schedule(self, samples, at=None) -> None:
+        self.scheduled.append((at, samples))
+
+
+class FakeClock:
+    def __init__(self, now: float = 0.0):
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now

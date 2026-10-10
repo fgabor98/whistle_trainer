@@ -5,6 +5,7 @@ Audio is held only in memory and discarded after analysis.
 
 from __future__ import annotations
 
+import time
 from enum import StrEnum
 
 import numpy as np
@@ -43,6 +44,7 @@ def to_mono_float(data: bytes, sample_format: QAudioFormat.SampleFormat, channel
 
 class _CaptureWorker(QObject):
     frames_ready = Signal(list)
+    clock_offset = Signal(float)
     started = Signal()
     stopped = Signal()
     failed = Signal(str)
@@ -53,6 +55,8 @@ class _CaptureWorker(QObject):
         self._io: QIODevice | None = None
         self._analyzer: Analyzer | None = None
         self._format = QAudioFormat()
+        self._samples = 0
+        self._offset: float | None = None
 
     @Slot(object, float)
     def start(self, device: QAudioDevice, threshold_db: float) -> None:
@@ -68,6 +72,8 @@ class _CaptureWorker(QObject):
             return
         self._format = audio_format
         self._analyzer = Analyzer(audio_format.sampleRate(), threshold_db)
+        self._samples = 0
+        self._offset = None
         self._source = QAudioSource(device, audio_format, self)
         self._source.setBufferSize(audio_format.bytesForDuration(round(_BUFFER_S * 1_000_000)))
         self._source.stateChanged.connect(self._on_state_changed)
@@ -103,6 +109,13 @@ class _CaptureWorker(QObject):
             return
         data = bytes(self._io.readAll().data())
         samples = to_mono_float(data, self._format.sampleFormat(), self._format.channelCount())
+        self._samples += len(samples)
+        # Capture time t was recorded at about monotonic time t + offset. Samples arrive
+        # late by a varying amount, so the smallest offset seen is the best estimate.
+        offset = time.monotonic() - self._samples / self._format.sampleRate()
+        if self._offset is None or offset < self._offset:
+            self._offset = offset
+            self.clock_offset.emit(offset)
         frames = self._analyzer.feed(samples)
         if frames:
             self.frames_ready.emit(frames)
@@ -135,6 +148,8 @@ class AudioInput(QObject):
         super().__init__(parent)
         self.running = False
         self.device_id: str | None = None
+        # Monotonic time = capture time + capture_offset, for the current capture.
+        self.capture_offset: float | None = None
         self._thread = QThread()
         self._thread.setObjectName("audio-capture")
         self._worker = _CaptureWorker()
@@ -143,6 +158,7 @@ class AudioInput(QObject):
         self._stop_requested.connect(self._worker.stop)
         self._threshold_requested.connect(self._worker.set_threshold)
         self._worker.frames_ready.connect(self.frames_ready)
+        self._worker.clock_offset.connect(self._set_offset)
         self._worker.started.connect(lambda: self._set_running(True))
         self._worker.stopped.connect(lambda: self._set_running(False))
         self._worker.failed.connect(self._on_failed)
@@ -156,6 +172,7 @@ class AudioInput(QObject):
 
     def start(self, device: DeviceInfo, threshold_db: float) -> None:
         self.device_id = device.id
+        self.capture_offset = None
         self._start_requested.emit(device.device, threshold_db)
 
     def stop(self) -> None:
@@ -169,6 +186,9 @@ class AudioInput(QObject):
         self.stop()
         self._thread.quit()
         self._thread.wait()
+
+    def _set_offset(self, offset: float) -> None:
+        self.capture_offset = offset
 
     def _set_running(self, running: bool) -> None:
         if running != self.running:
