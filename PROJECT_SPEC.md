@@ -40,7 +40,7 @@ Accompaniment, lyrics, harmony, automatic transcription, arbitrary score imports
 
 The score is the main visual element. Scroll smoothly as needed, keeping the current note prominent. Use plain instructions such as “Whistle higher,” “Hold this note,” and “Take a breath.” Unreliable input shows “No clear pitch.” Use text and symbols alongside color.
 
-Practice controls include Pause or Resume, Hear target note, Restart section or song, and Library. While paused, users can select a section or starting note and change mode, tempo, difficulty, or transposition.
+Practice controls include Pause or Resume, Hear target note, Restart section or song, and Library. While paused, users can select a section or starting note and change mode, tempo, difficulty, or transposition. A section is chosen on the score while paused: clicking a note sets where practice starts, and Shift+clicking a note sets where the section ends. The section is shaded on the score until it is cleared. The summary offers to practice again the measure that needed the most retries, which selects it as a section.
 
 An optional audible metronome is intended for headphone use; visual beats alone must support rhythm practice. Neither mode plays melody accompaniment during assessment.
 

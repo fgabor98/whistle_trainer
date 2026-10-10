@@ -40,8 +40,8 @@ class SongProgress:
     def mark_completed(self, index: int) -> None:
         self.completed.add(index)
 
-    def add_retry(self, index: int) -> None:
-        self.retries[index] = self.retries.get(index, 0) + 1
+    def add_retry(self, index: int, count: int = 1) -> None:
+        self.retries[index] = self.retries.get(index, 0) + count
 
     def record_completion(self, on: date | None = None) -> None:
         self.completions.append((on or date.today()).isoformat())

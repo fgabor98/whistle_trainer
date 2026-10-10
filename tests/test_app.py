@@ -1,4 +1,6 @@
 import pytest
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QKeySequence
 
 from audio_helpers import FrameScript
 from fakes import BUILTIN, MIC, SPEAKERS, FakeAudio, FakeClock, FakeDevices, FakePlayback
@@ -269,9 +271,15 @@ def test_practice_starts_listening_and_shows_first_note(window, audio, settings)
     assert page.guide_label.text() == strings.GUIDE_START_WHEN_READY
 
 
-def intro_script(script: FrameScript) -> FrameScript:
-    """The introductory exercise performed correctly at 120 bpm (one beat = 0.5 s)."""
-    return (script.pitched(G5, 2.0)  # whole note G5
+def intro_script(script: FrameScript, a5_failures: int = 0) -> FrameScript:
+    """The introductory exercise performed at 120 bpm (one beat = 0.5 s).
+
+    a5_failures adds failed attempts at the second note before it is played correctly.
+    """
+    script.pitched(G5, 2.0)  # whole note G5
+    for _ in range(a5_failures):
+        script.pitched(A5, 0.5).quiet(0.3)
+    return (script
             .pitched(A5, 1.0).quiet(1.0)  # half A5, half rest
             .pitched(B5_HZ, 1.0).quiet(0.15).pitched(B5_HZ, 1.0)  # repeated half notes
             .pitched(A5, 0.5).pitched(G5, 0.5).pitched(A5, 0.5).pitched(B5_HZ, 0.5)
@@ -286,11 +294,15 @@ def test_full_song_in_guided_mode(window, audio, settings):
     audio.send(intro_script(FrameScript()).frames)
     assert page.state is PracticeState.FINISHED
     assert page.engine.retries == {}
-    assert page.guide_label.text().startswith("✓ Song complete with no retries!")
     assert not audio.running
-    assert page.repeat_button.isVisibleTo(page) and page.library_button.isVisibleTo(page)
-    assert not page.pause_button.isVisibleTo(page)
-    page.library_button.click()
+    summary = window.summary_page
+    assert window.pages.currentWidget() is summary
+    assert summary.heading.text() == strings.SUMMARY_SONG_COMPLETE
+    assert summary.range_value.text() == strings.SUMMARY_WHOLE_SONG
+    assert summary.retries_value.text() == "0"
+    assert summary.hardest_label.text() == strings.SUMMARY_NO_RETRIES
+    assert not summary.section_button.isVisibleTo(summary)
+    summary.library_button.click()
     assert window.pages.currentWidget() is window.library_page and window.back_button.isHidden()
 
 
@@ -502,3 +514,243 @@ def test_rhythm_beats_stop_after_a_failure(window, audio, settings):
     clock.now = first + 0.3
     practice._update()
     assert practice.beat_indicator.current is None
+
+
+# Milestone 5: progress, summary, sections, settings while paused, Hear note, Listen, transposition
+
+def test_progress_is_saved_and_continue_is_offered(window, audio, settings, tmp_path):
+    page = start_intro(window, settings)
+    audio.send(FrameScript().pitched(G5, 2.0).pitched(A5, 1.0).quiet(0.5).frames)
+    page.pause_button.click()
+    progress = window.progress.songs["introductory-exercise"][Mode.GUIDED]
+    assert progress.completed == {0, 1} and progress.next_index == 2
+    assert progress.practice_seconds == pytest.approx(3.5, abs=0.05)
+    assert (tmp_path / "progress.json").exists()
+
+    window.back_button.click()
+    library = window.library_page
+    assert library.song_list.topLevelItem(0).text(3) == strings.LIBRARY_PROGRESS_NOTES.format(done=2, total=13)
+    assert library.continue_button.isVisibleTo(library)
+    assert library.continue_button.text() == strings.LIBRARY_CONTINUE.format(note=3)
+    library.continue_button.click()
+    assert window.practice_page.engine.position == 2
+
+
+def test_completion_is_recorded_and_shown_in_library(window, audio, settings):
+    start_intro(window, settings)
+    audio.send(intro_script(FrameScript()).frames)
+    progress = window.progress.songs["introductory-exercise"][Mode.GUIDED]
+    assert len(progress.completions) == 1 and progress.next_index == 0
+    assert window.summary_page.completed_label.isVisibleTo(window.summary_page)
+    window.summary_page.library_button.click()
+    assert window.library_page.song_list.topLevelItem(0).text(3) == strings.LIBRARY_PROGRESS_COMPLETE
+    assert not window.library_page.continue_button.isVisibleTo(window.library_page)
+
+
+def test_summary_lists_hardest_notes_and_offers_that_measure(window, audio, settings):
+    page = start_intro(window, settings)
+    audio.send(intro_script(FrameScript(), a5_failures=3).frames)  # three failed attempts at A5 in measure 2
+    summary = window.summary_page
+    assert window.pages.currentWidget() is summary
+    assert summary.retries_value.text() == "3"
+    assert strings.SUMMARY_HARDEST_ITEM.format(note="A5", measure="2", count=3) in summary.hardest_label.text()
+    assert summary.section_button.text() == strings.SUMMARY_PRACTICE_MEASURE.format(measure="2")
+    summary.section_button.click()
+    assert window.pages.currentWidget() is page
+    assert (page.range_start, page.range_end) == (1, 3)
+    assert page.score.section == (1, 3)
+    assert page.restart_button.text() == strings.PRACTICE_RESTART_SECTION
+
+
+def test_section_practice_finishes_at_section_end(window, audio, settings):
+    page = start_intro(window, settings)
+    page.pause_button.click()
+    assert page.paused_panel.isVisibleTo(page) and page.score.interactive
+    page.score.note_clicked.emit(1, False)  # start at A5
+    page.score.note_clicked.emit(2, True)  # end after the rest
+    assert (page.range_start, page.range_end) == (1, 3) and page.engine.position == 1
+    page.pause_button.click()
+    assert not page.paused_panel.isVisibleTo(page) and not page.score.interactive
+    audio.send(FrameScript().pitched(A5, 1.0).quiet(1.0).frames)
+    summary = window.summary_page
+    assert window.pages.currentWidget() is summary
+    assert summary.heading.text() == strings.SUMMARY_SECTION_COMPLETE
+    assert summary.range_value.text() == strings.SUMMARY_MEASURE.format(start="2")
+    progress = window.progress.songs["introductory-exercise"][Mode.GUIDED]
+    assert progress.completed == {1, 2} and progress.completions == []
+    summary.repeat_button.click()
+    assert window.pages.currentWidget() is page
+    assert (page.range_start, page.range_end) == (1, 3) and audio.running
+
+
+def test_clear_section_returns_to_whole_song(window, audio, settings):
+    page = start_intro(window, settings)
+    page.pause_button.click()
+    page.score.note_clicked.emit(4, False)
+    page.score.note_clicked.emit(6, True)
+    page.clear_section_button.click()
+    assert page.range_end is None and page.score.section is None and page.engine.position == 4
+
+
+def test_settings_change_while_paused_keeps_position(window, audio, settings):
+    page = start_intro(window, settings)
+    audio.send(FrameScript().pitched(G5, 2.0).pitched(A5, 0.5).frames)
+    page.pause_button.click()
+    page.tempo_spin.setValue(60)
+    assert page.engine.position == 1 and page.engine.tracker.credit_s == 0
+    assert page.guided.required_s(page.event) == pytest.approx(2.0)
+    page.mode_combo.setCurrentIndex(page.mode_combo.findData(Mode.RHYTHM))
+    assert page.mode is Mode.RHYTHM and page.rhythm.position == 1
+    assert settings.settings.song_preferences["introductory-exercise"].mode is Mode.RHYTHM
+    page.transposition_spin.setValue(2)
+    assert page.event.pitch.name == "B5"  # A5 up two semitones
+    assert page.engine.position == 1
+
+
+def test_settings_cannot_change_while_running(window, audio, settings):
+    page = start_intro(window, settings)
+    assert not page.paused_panel.isVisibleTo(page)
+    page.score.note_clicked.emit(5, False)
+    assert page.engine.position == 0
+
+
+def test_hear_note_ignores_microphone_then_restarts_note(window, audio, playback, settings):
+    clock = FakeClock()
+    page = window.practice_page
+    page.clock = clock
+    start_intro(window, settings)
+    audio.send(FrameScript().pitched(G5, 1.0).frames)
+    assert page.guided.tracker.credit_s > 0.9
+    clock.now = 1.0
+    page.hear_button.click()
+    assert playback.running and len(playback.scheduled) == 1
+    assert page.guided.tracker.credit_s == 0
+    script = FrameScript()
+    script.time = 1.0
+    audio.send(script.pitched(G5, 1.25).frames)  # the app's own note through the speakers: ignored
+    assert page.guided.tracker.credit_s == 0 and page.engine.position == 0
+    audio.send(script.pitched(G5, 2.1).frames)
+    assert page.engine.position == 1
+
+
+def test_hear_note_in_rhythm_mode_only_when_stopped(window, audio, playback, settings):
+    page = start_rhythm(window, settings)
+    audio.send(FrameScript().quiet(0.05).frames)
+    assert not page.hear_button.isEnabled()
+    page.pause_button.click()
+    assert page.hear_button.isEnabled()
+    page.hear_button.click()
+    assert len(playback.scheduled) == 1
+
+
+def test_listen_page_plays_song_and_notes(window, playback, settings, qtbot):
+    clock = FakeClock(100.0)
+    listen = window.listen_page
+    listen.clock = clock
+    window.library_page.select_song("introductory-exercise")
+    window.library_page.listen_button.click()
+    assert window.pages.currentWidget() is listen
+    assert window.title_label.text() == strings.PAGE_LISTEN.format(title="Introductory exercise")
+    assert listen.note_label.text() == strings.LISTEN_NOTE.format(note="G5", beats="4 beats")
+
+    listen.play_button.click()
+    assert listen.playing and playback.running
+    assert listen.play_button.text() == strings.LISTEN_STOP
+    # Only notes within the next second are rendered ahead.
+    assert [round(at - 100.0, 2) for at, _ in playback.scheduled] == [0.15]
+    clock.now = 100.15 + 4.5
+    listen._tick()
+    assert listen.position == 1  # A5 after the 4-beat G5
+    listen.play_button.click()  # Stop
+    assert not listen.playing and listen.position == 1 and playback.scheduled == []
+
+    listen.next_button.click()
+    assert listen.position == 2 and listen.note_label.text() == strings.LISTEN_REST.format(beats="2 beats")
+    assert playback.scheduled == []  # rests are silent
+    listen.score.note_clicked.emit(3, False)
+    assert listen.position == 3 and len(playback.scheduled) == 1
+
+    listen.practice_button.click()
+    assert window.pages.currentWidget() is window.practice_page
+    assert window.practice_page.engine.position == 3
+
+
+def test_listen_plays_to_end_then_restarts_from_beginning(window, playback, settings):
+    clock = FakeClock(0.0)
+    listen = window.listen_page
+    listen.clock = clock
+    window.start_listening("introductory-exercise")
+    listen.play_note(12)  # last note
+    listen.play_song()
+    clock.now = 10.0
+    listen._tick()
+    assert not listen.playing and listen.position == 12
+    listen.play_song()
+    assert listen._plan[0][1] == 0
+
+
+def test_listen_transposition_changes_score_and_saves(window, settings):
+    window.start_listening("introductory-exercise")
+    listen = window.listen_page
+    listen.transposition_spin.setValue(-2)
+    assert listen.song.events[0].pitch.name == "F5"
+    assert settings.settings.song_preferences["introductory-exercise"].transposition == -2
+
+
+def test_library_suggests_transposition_for_measured_range(window, settings):
+    calibrate(settings, MIC, low=79, high=91)  # G5 to G6
+    library = window.library_page
+    library.select_song("ode-to-joy")  # D5 to D6
+    library.activate()
+    assert library.suggestion_label.isVisibleTo(library)
+    assert library.suggestion_label.text() == strings.LIBRARY_SUGGESTION.format(low="G5", high="G6", shift=5)
+    library.use_suggestion_button.click()
+    assert library.transposition_spin.value() == 5
+    assert settings.settings.song_preferences["ode-to-joy"].transposition == 5
+    assert library.range_label.text() == strings.LIBRARY_RANGE.format(low="G5", high="G6")
+    assert library.suggestion_label.text() == strings.LIBRARY_SUGGESTION_FITS.format(low="G5", high="G6")
+
+
+def test_practice_uses_transposition(window, audio, settings):
+    window.library_page.select_song("introductory-exercise")
+    window.library_page.transposition_spin.setValue(3)
+    page = start_intro(window, settings)
+    assert page.target_label.text() == strings.PRACTICE_TARGET_NOTE.format(note="B♭5")
+
+
+def test_reset_song_progress_asks_first(window, audio, settings):
+    start_intro(window, settings)
+    audio.send(FrameScript().pitched(G5, 2.0).frames)
+    window.back_button.click()
+    library = window.library_page
+    library.confirm = lambda text: False
+    library.reset_song_button.click()
+    assert "introductory-exercise" in window.progress.songs
+    library.confirm = lambda text: True
+    library.reset_song_button.click()
+    assert "introductory-exercise" not in window.progress.songs
+    assert library.song_list.topLevelItem(0).text(3) == strings.LIBRARY_PROGRESS_NONE
+
+
+def test_reset_all_data_clears_settings_and_progress(window, audio, settings):
+    start_intro(window, settings)
+    audio.send(FrameScript().pitched(G5, 2.0).frames)
+    window.back_button.click()
+    library = window.library_page
+    library.confirm = lambda text: True
+    library.reset_all_button.click()
+    assert settings.settings.calibrations == {} and window.progress.songs == {}
+
+
+def test_note_names_setting(window, audio, settings):
+    window.library_page.note_names_check.setChecked(False)
+    assert settings.settings.show_note_names is False
+    page = start_intro(window, settings)
+    assert page.score.show_note_names is False
+
+
+def test_escape_returns_to_library(window, audio, settings):
+    start_intro(window, settings)
+    assert window.escape_shortcut.key() == QKeySequence(Qt.Key.Key_Escape)
+    window.escape_shortcut.activated.emit()
+    assert window.pages.currentWidget() is window.library_page and not audio.running

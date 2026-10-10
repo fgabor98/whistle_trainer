@@ -63,6 +63,21 @@ Checks that need a real microphone and a real whistle. Run them on the reference
 9. **Pause** during rhythm practice: the beat and clicks stop; **Resume** starts with a new count-in.
 10. Try 30 bpm and 120 bpm on Frère Jacques (eighth notes): note whether the timing windows feel fair.
 
+## Milestone 5: complete app
+
+1. **Listen:** open **Listen…** for each song. **Play song** plays the melody with a whistle-like tone, and the highlight follows the notes. **Stop** keeps the highlight; **Play song** continues from there. Arrow keys and clicking notes play single notes; rests are silent.
+2. Listen with a different tempo and transposition: playback and the score change, and practice uses the same settings.
+3. **Transposition:** after measuring your range in Audio setup, the library suggests a transposition. **Use** applies it, and the range shown fits your range.
+4. **Hear note** during guided practice: the note plays through the speakers, and the app does not count its own sound as your whistle. The note then starts over.
+5. In rhythm mode, **Hear note** works only when paused or after a mistake.
+6. **Sections:** pause, click a note, Shift+click a later note: the section is shaded, **Restart section** practices just that part, and finishing it shows "Section complete!".
+7. While paused, change mode, tempo, difficulty, and transposition: practice resumes from the same note with the new settings.
+8. **Summary:** after a song with some retries, the summary lists the hardest notes and offers to practice that measure again. **Repeat**, **Restart song**, and **Library** work.
+9. **Progress:** practice part of a song, close the app, reopen it: the library shows the progress and offers **Continue from note n**. Finish the song: it shows ✓ Completed.
+10. **Reset progress…** and **Reset all data…** ask for confirmation first and clear what they say.
+11. Untick **Show note names**: the score hides them everywhere.
+12. Press **Escape** on any page: you return to the library and the microphone stops.
+
 ## Results
 
 | Date | Microphone | Room | Background / whistle / threshold (dB) | Range | Notes |

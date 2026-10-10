@@ -34,3 +34,17 @@ def test_click_is_short_and_accent_is_higher():
     spectrum = lambda x: np.argmax(np.abs(np.fft.rfft(x, 48000)))
     assert spectrum(accent) == pytest.approx(2000, abs=60)
     assert spectrum(normal) == pytest.approx(1500, abs=60)
+
+
+def test_whistle_tone_is_detected_at_its_pitch():
+    from audio_helpers import analyze
+    from whistle_trainer.assessment.frames import FrameClass
+    from whistle_trainer.audio.synth import whistle
+
+    signal = whistle(987.77, 1.0, 48000)
+    assert np.abs(signal).max() == pytest.approx(10 ** (-12 / 20), rel=1e-3)
+    assert signal[0] == pytest.approx(0.0, abs=1e-3) and signal[-1] == pytest.approx(0.0, abs=1e-3)
+    frames = [f for f in analyze(signal.astype(np.float64)) if f.frame_class is FrameClass.PITCHED]
+    assert len(frames) > 80
+    cents = [1200 * np.log2(f.f0_hz / 987.77) for f in frames]
+    assert max(abs(c) for c in cents) < 12  # vibrato of ±8 cents

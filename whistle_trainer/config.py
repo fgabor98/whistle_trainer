@@ -75,3 +75,8 @@ TEST_NOTE_HOLD_S = 1.0
 # Rhythm mode: the count-in starts this long after the latest analyzed frame,
 # leaving time to schedule the first clicks ahead of the output buffer.
 COUNT_IN_LEAD_S = 0.5
+
+# Hear target note: length of the reference, and how long the microphone is
+# ignored after it ends so the app cannot hear itself.
+REFERENCE_NOTE_S = 1.0
+REFERENCE_SETTLE_S = 0.300

@@ -243,3 +243,17 @@ def test_audio_performance_with_metronome_clicks(parse):
     for frame in analyze(signal):
         engine.feed(frame)
     assert engine.status is RhythmStatus.FINISHED, engine.failure
+
+
+def test_section_schedules_only_its_events(parse):
+    engine = RhythmEngine(parse(score(note("C5") + note("D5") + note("E5") + note("D5"))), 60, 40.0, HOP, 1, 3)
+    engine.schedule(0.0)
+    assert engine.event_times(3) is None
+    assert len(engine.beat_times()) == 4 + 2
+    feed(engine, FrameScript().quiet(COUNT_IN).pitched(D6, 1.0).pitched(E6, 1.0).quiet(0.05))
+    assert engine.status is RhythmStatus.FINISHED and engine.completed == {1, 2}
+
+
+def test_current_credit_before_scheduling_shows_requirement(parse):
+    engine = RhythmEngine(parse(score(note("C5") * 4)), 60, 40.0, HOP)
+    assert engine.current_credit() == pytest.approx((0.0, 0.8))

@@ -34,8 +34,10 @@ class GuidedUpdate:
 
 
 class GuidedEngine:
-    def __init__(self, song: Song, tempo: float, tolerance_cents: float, hop_s: float, start_index: int = 0):
+    def __init__(self, song: Song, tempo: float, tolerance_cents: float, hop_s: float, start_index: int = 0,
+                 end_index: int | None = None):
         self.song = song
+        self.end_index = len(song.events) if end_index is None else end_index  # exclusive
         self.tempo = tempo
         self.tolerance_cents = tolerance_cents
         self.hop_s = hop_s
@@ -50,7 +52,7 @@ class GuidedEngine:
 
     @property
     def finished(self) -> bool:
-        return self.position >= len(self.song.events)
+        return self.position >= self.end_index
 
     def required_s(self, event: Event) -> float:
         return seconds(event.duration, self.tempo)

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -25,8 +26,10 @@ from whistle_trainer.music.library import SongLibrary, load_songs
 from whistle_trainer.storage.progress import ProgressStore
 from whistle_trainer.storage.settings import SettingsStore
 from whistle_trainer.ui.pages.library import LibraryPage
+from whistle_trainer.ui.pages.listen import ListenPage
 from whistle_trainer.ui.pages.practice import PracticePage
 from whistle_trainer.ui.pages.setup import SetupPage
+from whistle_trainer.ui.pages.summary import SessionSummary, SummaryPage
 from whistle_trainer.ui.pages.test_input import TestInputPage
 
 
@@ -58,21 +61,35 @@ class MainWindow(QMainWindow):
         header.addWidget(self.listening_label)
 
         self.pages = QStackedWidget()
-        self.library_page = LibraryPage(library, settings)
+        self.library_page = LibraryPage(library, settings, progress)
         self.library_page.song_selected.connect(self._on_song_selected)
-        self.library_page.start_requested.connect(self.start_practice)
+        self.library_page.start_requested.connect(lambda song_id, start: self.start_practice(song_id, start))
+        self.library_page.listen_requested.connect(self.start_listening)
         self.library_page.audio_setup_requested.connect(lambda: self.show_page(self.setup_page))
+        self.library_page.reset_all_requested.connect(self.reset_all)
         self.setup_page = SetupPage(devices, audio, settings)
         self.setup_page.test_input_requested.connect(lambda: self.show_page(self.test_input_page))
         self.test_input_page = TestInputPage(devices, audio, settings)
-        self.practice_page = PracticePage(devices, audio, playback, settings)
+        self.listen_page = ListenPage(devices, playback, settings)
+        self.listen_page.practice_requested.connect(
+            lambda start: self.start_practice(self.listen_page.original.id, start))
+        self.practice_page = PracticePage(devices, audio, playback, settings, progress)
         self.practice_page.audio_setup_requested.connect(lambda: self.show_page(self.setup_page))
-        self.practice_page.library_requested.connect(self.show_library)
+        self.practice_page.finished.connect(self.show_summary)
+        self.summary_page = SummaryPage()
+        self.summary_page.repeat_requested.connect(self.repeat_practice)
+        self.summary_page.restart_requested.connect(
+            lambda: self.start_practice(self.practice_page.original.id))
+        self.summary_page.section_requested.connect(
+            lambda start, end: self.start_practice(self.practice_page.original.id, start, end))
+        self.summary_page.library_requested.connect(self.show_library)
         self.page_titles = {
             self.library_page: strings.PAGE_LIBRARY,
             self.setup_page: strings.PAGE_AUDIO_SETUP,
             self.test_input_page: strings.PAGE_TEST_INPUT,
+            self.listen_page: "",
             self.practice_page: "",
+            self.summary_page: "",
         }
         for page in self.page_titles:
             self.pages.addWidget(page)
@@ -83,6 +100,9 @@ class MainWindow(QMainWindow):
         layout.addLayout(header)
         layout.addWidget(self.pages, stretch=1)
         self.setCentralWidget(central)
+
+        self.escape_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
+        self.escape_shortcut.activated.connect(self.show_library)
 
         self.show_page(self.library_page, remember=False)
         if settings.settings.last_song_id:
@@ -106,10 +126,35 @@ class MainWindow(QMainWindow):
         self.history.clear()
         self.back_button.hide()
 
-    def start_practice(self, song_id: str) -> None:
+    def _show_from_library(self, page: QWidget) -> None:
+        """Show a page whose Back button returns to the library."""
+        self.show_page(page, remember=False)
+        self.history = [self.library_page]
+        self.back_button.show()
+
+    def start_practice(self, song_id: str, start: int = 0, end: int | None = None) -> None:
         song = self.library.get(song_id)
-        self.practice_page.load(song, self.settings.settings.preferences_for(song.id, song.tempo))
-        self.show_page(self.practice_page)
+        self.practice_page.load(song, self.settings.settings.preferences_for(song.id, song.tempo), start, end)
+        self._show_from_library(self.practice_page)
+
+    def start_listening(self, song_id: str) -> None:
+        song = self.library.get(song_id)
+        self.listen_page.load(song, self.settings.settings.preferences_for(song.id, song.tempo))
+        self._show_from_library(self.listen_page)
+
+    def show_summary(self, summary: SessionSummary) -> None:
+        self.summary_page.show_summary(summary)
+        self._show_from_library(self.summary_page)
+
+    def repeat_practice(self) -> None:
+        """Practice the same song or section again."""
+        page = self.practice_page
+        self.start_practice(page.original.id, page.range_start, page.range_end)
+
+    def reset_all(self) -> None:
+        self.settings.clear()
+        self.progress.clear()
+        self.library_page.reload_settings()
 
     def go_back(self) -> None:
         if self.history:

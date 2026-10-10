@@ -37,7 +37,7 @@ whistle_trainer/
     devices.py           Input/output device listing and monitoring
     capture.py           Capture and analysis worker thread
     playback.py          Output stream, mixer, scheduled sounds
-    synth.py             Metronome click (and, from milestone 5, whistle tone) synthesis
+    synth.py             Whistle tone and metronome click synthesis
   pitch/
     yin.py               YIN pitch estimator
     bandpass.py          Streaming FIR band-pass filter
@@ -256,7 +256,7 @@ The count-in starts `COUNT_IN_LEAD_S` (0.5 s) after the latest frame received wh
 
 ### Reference playback and self-hearing protection
 
-While the app is playing any sound in a practice session (Hear target note, metronome excluded), input frames are discarded from assessment until 300 ms after the sound ends. Unfinished hold progress is reset afterwards. In rhythm mode, Hear target note is only available while stopped.
+Hear target note plays a 1-second whistle tone of the current note. While capture is running, frames up to 300 ms after the tone ends (on the capture clock) are discarded, the detected-note display is cleared, and unfinished progress is reset when the tone starts, so the app's own sound can never complete a note. In guided mode it is available at any time during practice. In rhythm mode it is only available while stopped (paused, or after a failure), and the next count-in waits for Retry. The metronome is excluded from this protection.
 
 The metronome click is short (20 ms) and broadband, so it is classified as `UNCLEAR` or `QUIET` rather than accepted; the product specification recommends headphones for it. This is covered by a test with the click mixed into a synthetic whistle.
 
@@ -269,20 +269,22 @@ Each note is rendered on demand at 48 kHz:
 - Sine at the sounding frequency, plus a second harmonic at −30 dB.
 - Vibrato: 5 Hz, ±8 cents, fading in after 200 ms.
 - Envelope: 15 ms attack, 40 ms release; tied notes are one sound.
-- Breath noise: band-pass filtered noise around the fundamental at −35 dB.
+- Breath noise at −35 dB, kept in a narrow band around the fundamental: white noise smoothed to a few hundred hertz of bandwidth, then ring-modulated by the tone. Seeded per note, so a note sounds the same each time.
 - Output at a fixed level of −12 dBFS peak.
 
 The metronome click is a 20 ms decaying burst at 2 kHz for beat one and 1.5 kHz for other beats.
 
 ### Playback service
 
-A single `QAudioSink` on the selected output device (default: system default) in push mode, with a requested 40 ms buffer. A 5 ms timer keeps the buffer full, writing silence when nothing is scheduled, so the output position advances steadily. A sound scheduled for monotonic time `T` is placed at output sample `processed + (T − now) × rate`, where `processed` comes from `processedUSecs()`; a sound that is already too late plays as soon as possible. Overlapping sounds are mixed and clipped to ±1. In milestone 4 the service plays the metronome; it is opened only in rhythm mode with the metronome sound enabled, and closed when practice stops, pauses, or finishes. Measured on the reference system, the written position stays 20 to 40 ms ahead of what has been played. Listen mode adds note playback and a highlight synchronized to it.
+A single `QAudioSink` on the selected output device (default: system default) in push mode, with a requested 40 ms buffer. A 5 ms timer keeps the buffer full, writing silence when nothing is scheduled, so the output position advances steadily. A sound scheduled for monotonic time `T` is placed at output sample `processed + (T − now) × rate`, where `processed` comes from `processedUSecs()`; a sound that is already too late plays as soon as possible. Overlapping sounds are mixed and clipped to ±1. The output is opened only when needed: for the metronome in rhythm mode, for Hear target note, and in Listen mode. It is closed when practice stops, pauses, or finishes, and when leaving the Listen page. Measured on the reference system, the written position stays 20 to 40 ms ahead of what has been played.
 
 ### Listen mode player
 
-- **Play song:** schedules all events from the current position at the selected tempo and transposition. The highlight follows each event's scheduled start. Stop keeps the position on the last played event; Play resumes from there, or from the beginning after the end.
+- **Play song:** plans all events from the current position at the selected tempo and transposition, starting 150 ms after the click. Notes are rendered and scheduled up to 1 second ahead of time, so playback starts immediately even for long songs. A 20 ms timer moves the highlight to each event at its planned start. Stop clears the scheduled notes and keeps the position on the last played event; Play resumes from there, or from the beginning after the end was reached.
+- **Tempo and transposition** can be changed on the page; they are the song's saved preferences, shared with practice.
 - **Next/Previous note and clicking a note:** stop any current playback, move the position, and play that single event; rests are highlighted silently.
 - Input capture is never started in Listen mode, and no progress is changed.
+- **Practice from here** starts practice at the highlighted note.
 
 ## User interface
 
@@ -292,25 +294,26 @@ A single `QMainWindow` with a `QStackedWidget`:
 
 | Page | Notes |
 | --- | --- |
-| Library | Song list with length, range, and progress; preparation panel with mode (Guided or Rhythm, with a one-line description), metronome sound option (rhythm mode, saved globally), tempo, difficulty, transposition (with suggestion), Listen, Start, and Audio setup. The introductory exercise is listed first. |
+| Library | Song list with length, range, and progress in the selected mode ("—", "12 of 42 notes", "✓ Completed", "✓ Completed 3×"); Show note names; Reset all data (with confirmation). Preparation panel: mode (Guided or Rhythm, with a one-line description), metronome sound option (rhythm mode, saved globally), tempo, difficulty, transposition with the transposed range and, if a range was measured, a suggestion with Use; estimated length; Start practice; Continue from note n (when saved progress has an unfinished note); Listen; Reset progress (with confirmation); Audio setup. The introductory exercise is listed first. |
 | Audio setup | Input and output selectors, live level meter, detected note, step-by-step calibration with status text, Measure my range, and Test input. |
 | Test input | Whistle one selectable target note (C5 to C7, default the middle of the measured range, else B5) with the detected note, pitch meter, hold indicator for a 1-second hold, guidance text, and Try again. Uses the guided-mode hold rules. |
-| Listen | Score view and Listen controls. |
-| Practice | Song title as page title, "Note n of m", score view, target note and octave (or "Rest"), detected note, pitch meter, hold indicator ("Hold" or "Quiet"; in rhythm mode against the 80 percent requirement), guidance ("Get ready… n" during the count-in, "Whistle G5 now" in rhythm mode), beat indicator (rhythm), and controls: Pause/Resume and Restart song; Retry after a rhythm failure; Audio setup when the input is missing or lost; Repeat and Library when the song is complete. Listening starts when a song is started from the library. Returning to the page (for example from Audio setup) stays paused until Resume. Hear target note is added with sound output in milestone 5. |
-| Summary | Results from the session and Repeat, Restart, Library. |
+| Listen | Score view (clickable), the highlighted note with its length in beats, Previous note, Play song/Stop, Next note, Practice from here, tempo, and transposition. |
+| Practice | Song title as page title, "Note n of m", score view, target note and octave (or "Rest"), detected note, pitch meter, hold indicator ("Hold" or "Quiet"; in rhythm mode against the 80 percent requirement), guidance ("Get ready… n" during the count-in, "Whistle G5 now" in rhythm mode), beat indicator (rhythm), and controls: Pause/Resume and Restart song; Retry after a rhythm failure; Audio setup when the input is missing or lost; Hear note; Restart section when a section is chosen. While paused, a panel offers mode, tempo, difficulty, and transposition, and the score becomes clickable: click sets the start, Shift+click sets the end of a section (shaded on the score), and Clear section returns to the whole song. Changes keep the current position and discard unfinished progress. Listening starts when practice is started; returning to the page (for example from Audio setup) stays paused until Resume. Finishing opens the summary. |
+| Summary | "Song complete!" or "Section complete!", a note when every note of the song is now completed in the mode, mode, what was practiced (whole song, "Measure 5", "Measures 3–4", or "From measure 5 to the end"), active practice time, retries, the three notes with the most retries, and buttons: Practice measure n again (the measure with the most retries, if any), Repeat (same section or song), Restart song (whole song), and Library. Back returns to the library. |
 
 A header bar shows the page title, a Back button, and the listening indicator whenever capture is active.
 
 ### Score view
 
 - Custom `QWidget` drawn with `QPainter`. The melody is laid out as one continuous staff line that scrolls horizontally; the current event is kept about one third from the left, with smooth animated scrolling.
-- Glyphs come from the Bravura font (SMuFL code points): clef, key and time signatures, note heads, stems, flags, dots, ties, rests, accidentals, and ledger lines. Beams for eighth-note pairs replace flags in milestone 5.
+- Glyphs come from the Bravura font (SMuFL code points): clef, key and time signatures, note heads, stems, flags, dots, ties, rests, accidentals, and ledger lines. A pair of undotted eighth notes that fills one beat is beamed: both stems take the direction of their average position, and the beam's slope is limited to one staff space.
 - Accidentals follow the key signature and are remembered until the end of the measure; tied continuations do not repeat them.
 - The staff spacing scales with the widget height (7 to 16 pixels per staff space), and the content is centered vertically.
 - Note spacing is proportional to duration with a minimum width so note names fit.
 - Note names are drawn below each note with the sounding octave (for example "B5") and can be hidden in settings.
 - States are shown with color and shape: current event (highlight band, highlight color, bold note name), completed (dimmed, with a check mark above), failed (cross, rhythm mode), upcoming (normal). Colors come from the Qt palette so light and dark system themes both work.
-- Clicking or tapping a note selects it (Listen, and Practice while paused).
+- Clicking or tapping a note selects it (Listen, and Practice while paused); the view reports the event under the pointer and whether Shift was held.
+- A chosen section is shown as a lightly shaded band with a line at each end.
 
 ### Practice widgets
 
@@ -320,7 +323,7 @@ A header bar shows the page title, a Back button, and the listening indicator wh
 
 ### Keyboard shortcuts
 
-Space: Play/Stop in Listen, Pause/Resume in Practice. Left and Right arrows: Previous and Next note in Listen. H: Hear target note. R: Retry. Escape: Back to Library.
+Space: Play/Stop in Listen, Pause/Resume in Practice. Left and Right arrows: Previous and Next note in Listen. H: Hear target note. R: Retry (rhythm mode). Escape: back to the library from any page.
 
 ## Persistence
 
@@ -328,6 +331,15 @@ Files are stored using XDG directories through `platformdirs`:
 
 - `~/.config/whistle-trainer/settings.json`: devices, calibration per input, notation preference, last used mode, difficulty, tempo, and transposition per song.
 - `~/.local/share/whistle-trainer/progress.json`: per song id and mode: completed event indices, next unfinished event index, retry counts per event, active practice time, and completion records with dates.
+
+Progress is updated after every batch of frames and saved on pause, input loss, leaving the practice page, finishing, and closing the app:
+
+- Completed events accumulate across sessions; section practice only adds the events actually completed.
+- The next unfinished event is the current position when practice stops; after reaching the end of the song it returns to the beginning, and after a section it is the note after the section. The library offers "Continue from note n" when it is past the first note.
+- Retries (guided retries and rhythm failures) and active practice time are added as they happen.
+- A completion record (the date) is added when practice reaches the end of the song and every event has been completed in that mode.
+- Progress is kept per mode; switching modes while paused keeps the position but does not mark anything as practiced in the other mode.
+- Reset progress removes one song's progress in both modes; Reset all data deletes both files after confirmation.
 
 Both files include a `schema_version`. Writes are atomic (write to a temporary file, then rename). A corrupt file is renamed with a `.corrupt` suffix and replaced by defaults, with a message to the user. If a song file changes so that its event count differs from saved progress, that song's progress is reset with a message.
 

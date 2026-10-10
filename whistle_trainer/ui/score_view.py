@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QSize, Qt, QVariantAnimation
+from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QSize, Qt, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPainterPath, QPalette, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
@@ -28,6 +28,7 @@ TIME_SIG_DIGITS = ""
 
 STEM_LENGTH = 3.5
 STEM_THICKNESS = 0.12
+BEAM_THICKNESS = 0.5
 STAFF_LINE_THICKNESS = 0.13
 LEDGER_EXTENSION = 0.4
 CHECK_MARK = "✓"
@@ -47,7 +48,10 @@ class ScoreView(QWidget):
     """Shows the song with the current event highlighted and completed events checked.
 
     The view scrolls so that the current event stays about a third from the left.
+    When interactive, clicking a note emits note_clicked(index, shift).
     """
+
+    note_clicked = Signal(int, bool)
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -56,6 +60,8 @@ class ScoreView(QWidget):
         self.current: int | None = None
         self.completed: set[int] = set()
         self.failed: int | None = None
+        self.section: tuple[int, int] | None = None  # (start, end exclusive)
+        self.interactive = False
         self.show_note_names = True
         self.scroll = 0.0
         self._animation = QVariantAnimation(self)
@@ -76,9 +82,37 @@ class ScoreView(QWidget):
         self.show_note_names = show_note_names
         self.completed = set()
         self.failed = None
+        self.section = None
         self.current = None
         self.scroll = 0.0
         self.update()
+
+    def set_section(self, section: tuple[int, int] | None) -> None:
+        if section != self.section:
+            self.section = section
+            self.update()
+
+    def set_interactive(self, interactive: bool) -> None:
+        self.interactive = interactive
+        self.setCursor(Qt.CursorShape.PointingHandCursor if interactive else Qt.CursorShape.ArrowCursor)
+
+    def event_at(self, x: float) -> int | None:
+        """The event drawn at a horizontal widget position, if any."""
+        if self.layout_data is None:
+            return None
+        layout_x = (x + self.scroll) / self.space - 1.0
+        for index, event in enumerate(self.layout_data.events):
+            if event.left <= layout_x <= event.right:
+                return index
+        return None
+
+    def mousePressEvent(self, event) -> None:
+        if not self.interactive or event.button() != Qt.MouseButton.LeftButton:
+            return super().mousePressEvent(event)
+        index = self.event_at(event.position().x())
+        if index is not None:
+            shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            self.note_clicked.emit(index, shift)
 
     def set_failed(self, index: int | None) -> None:
         if index != self.failed:
@@ -151,6 +185,15 @@ class ScoreView(QWidget):
         painter.setFont(music)
 
         layout = self.layout_data
+        if self.section is not None:
+            first, last = layout.events[self.section[0]], layout.events[self.section[1] - 1]
+            band = QColor(highlight)
+            band.setAlpha(28)
+            top, bottom = self.y_for(16), self.y_for(-8)
+            painter.fillRect(QRectF(self.x_for(first.left), top, (last.right - first.left) * sp, bottom - top), band)
+            painter.setPen(QPen(highlight, 0.2 * sp))
+            for x in (self.x_for(first.left), self.x_for(last.right)):
+                painter.drawLine(QPointF(x, top), QPointF(x, bottom))
         if self.current is not None and self.current < len(layout.events):
             event = layout.events[self.current]
             band = QColor(highlight)
@@ -183,6 +226,10 @@ class ScoreView(QWidget):
             index = part.event_index
             color = highlight if index == self.current else done if index in self.completed else text
             self._draw_part(painter, part, color)
+        for a, b in layout.beams:
+            first, second = layout.parts[a], layout.parts[b]
+            if visible[0] <= first.x <= visible[1] or visible[0] <= second.x <= visible[1]:
+                self._draw_beam(painter, first, second)
 
         label_font = QFont(self.font())
         label_font.setPixelSize(max(1, round(sp * 1.3)))
@@ -237,7 +284,7 @@ class ScoreView(QWidget):
             for dot in range(part.dots):
                 painter.drawText(QPointF(x + (part.head_width + 0.4 + dot * 0.6) * sp, dot_y), AUGMENTATION_DOT)
 
-        if part.note_type != "whole":
+        if part.note_type != "whole" and not part.beamed:
             if part.stem_up:
                 stem_x = x + (part.head_width - STEM_THICKNESS / 2) * sp
                 start, end = y - 0.168 * sp, y - STEM_LENGTH * sp
@@ -253,6 +300,42 @@ class ScoreView(QWidget):
 
         if part.tied_to_next:
             self._draw_tie(painter, part, color)
+
+    def _part_color(self, part: PartLayout) -> QColor:
+        palette = self.palette()
+        if part.event_index == self.current:
+            return palette.color(QPalette.ColorRole.Highlight)
+        color = QColor(palette.color(QPalette.ColorRole.Text))
+        if part.event_index in self.completed:
+            color.setAlpha(120)
+        return color
+
+    def _draw_beam(self, painter: QPainter, first: PartLayout, second: PartLayout) -> None:
+        """Stems for a beamed pair, joined by one beam with a gentle slope."""
+        sp = self.space
+        direction = -1 if first.stem_up else 1
+        stems = []
+        for part in (first, second):
+            x = self.x_for(part.x)
+            stem_x = x + (part.head_width - STEM_THICKNESS / 2) * sp if part.stem_up else x + STEM_THICKNESS / 2 * sp
+            stems.append((stem_x, self.y_for(part.position)))
+        natural = [y + direction * STEM_LENGTH * sp for _, y in stems]
+        slope = max(-sp, min(sp, natural[1] - natural[0]))
+        start = min(natural[0], natural[1] - slope) if first.stem_up else max(natural[0], natural[1] - slope)
+        beam_y = [start, start + slope]
+        for (stem_x, y), end_y, part in zip(stems, beam_y, (first, second)):
+            painter.setPen(QPen(self._part_color(part), STEM_THICKNESS * sp))
+            painter.drawLine(QPointF(stem_x, y + direction * 0.168 * sp), QPointF(stem_x, end_y))
+        thickness = -direction * BEAM_THICKNESS * sp  # the beam grows toward the noteheads
+        path = QPainterPath(QPointF(stems[0][0], beam_y[0]))
+        path.lineTo(QPointF(stems[1][0], beam_y[1]))
+        path.lineTo(QPointF(stems[1][0], beam_y[1] + thickness))
+        path.lineTo(QPointF(stems[0][0], beam_y[0] + thickness))
+        path.closeSubpath()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(self._part_color(first))
+        painter.drawPath(path)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
 
     def _draw_tie(self, painter: QPainter, part: PartLayout, color: QColor) -> None:
         layout = self.layout_data

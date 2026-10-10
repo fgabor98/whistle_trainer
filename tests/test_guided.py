@@ -175,3 +175,11 @@ def test_audio_melody_with_repeated_notes_rest_and_tie(parse):
     for frame in analyze(signal):
         engine.feed(frame)
     assert engine.finished and engine.retries == {}
+
+
+def test_section_ends_at_end_index(parse):
+    engine = GuidedEngine(parse(score(note("C5") + note("D5") + note("E5") + note("D5"))), 60, 40.0, HOP, 1, 3)
+    feed(engine, FrameScript().pitched(D6, 1.0))
+    assert not engine.finished
+    updates = feed(engine, FrameScript().pitched(E6, 1.0))
+    assert updates[-1].finished and engine.completed == {1, 2}

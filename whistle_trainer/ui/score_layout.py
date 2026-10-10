@@ -44,6 +44,8 @@ def part_advance(quarters: float, has_accidental: bool) -> float:
 @dataclass
 class PartLayout:
     event_index: int
+    start: float  # quarter notes from the start of the song
+    measure_index: int
     x: float  # left edge of the notehead or rest
     position: int | None  # staff position; None for rests
     note_type: str | None  # None for a whole-measure rest
@@ -51,6 +53,7 @@ class PartLayout:
     accidental: int | None  # alter to draw before the note, if any
     stem_up: bool
     tied_to_next: bool
+    beamed: bool = False  # drawn with a beam instead of a flag
 
     @property
     def head_width(self) -> float:
@@ -79,6 +82,7 @@ class ScoreLayout:
     events: list[EventLayout]
     barlines: list[float]
     width: float
+    beams: list[tuple[int, int]] = field(default_factory=list)  # indexes into parts
 
 
 def layout_song(song: Song) -> ScoreLayout:
@@ -98,6 +102,7 @@ def layout_song(song: Song) -> ScoreLayout:
     barlines: list[float] = []
     measure_index = 0
     measure_state: dict[tuple[str, int], int] = {}
+    position_q = song.events[0].start if song.events else 0
 
     for event in song.events:
         written = event.pitch.shifted_octaves(WRITTEN_OCTAVE_OFFSET) if event.pitch else None
@@ -121,12 +126,15 @@ def layout_song(song: Song) -> ScoreLayout:
             if part.note_type is None:  # whole-measure rest, centered in the measure
                 measure = song.measures[part.measure_index]
                 width = part_advance(float(measure.duration), False)
-                layout = PartLayout(event.index, x + width / 2 - 0.6, None, None, 0, None, True, False)
+                layout = PartLayout(event.index, float(position_q), part.measure_index, x + width / 2 - 0.6,
+                                    None, None, 0, None, True, False)
                 advance = width
             else:
                 head_x = x + (ACCIDENTAL_WIDTH.get(accidental, 0) + 0.3 if accidental is not None else 0.0)
                 layout = PartLayout(
                     event_index=event.index,
+                    start=float(position_q),
+                    measure_index=part.measure_index,
                     x=head_x,
                     position=position,
                     note_type=part.note_type,
@@ -143,6 +151,27 @@ def layout_song(song: Song) -> ScoreLayout:
                 event_layout.left = x - 0.4
             event_layout.right = layout.x + layout.head_width + 0.4 + (0.6 if layout.dots else 0.0)
             x += advance
+            position_q += part.duration
 
     barlines.append(x - 0.6)
-    return ScoreLayout(key_x, signature, time_x, (song.time.beats, song.time.beat_type), parts, events, barlines, x)
+    layout = ScoreLayout(key_x, signature, time_x, (song.time.beats, song.time.beat_type), parts, events, barlines, x)
+    layout.beams = _beam_eighth_pairs(song, parts)
+    return layout
+
+
+def _beam_eighth_pairs(song: Song, parts: list[PartLayout]) -> list[tuple[int, int]]:
+    """Pairs of undotted eighth notes that fill one beat of a measure, given a shared stem direction."""
+    beat = float(song.time.beat_length)
+    beams = []
+    for i, (first, second) in enumerate(zip(parts, parts[1:])):
+        if any(p.note_type != "eighth" or p.dots or p.position is None or p.beamed for p in (first, second)):
+            continue
+        measure = song.measures[first.measure_index]
+        offset = first.start - float(measure.start)
+        if first.measure_index != second.measure_index or offset % beat > 1e-9 or beat != 1.0:
+            continue
+        stem_up = (first.position + second.position) / 2 < 4
+        for part in (first, second):
+            part.beamed, part.stem_up = True, stem_up
+        beams.append((i, i + 1))
+    return beams

@@ -78,8 +78,10 @@ class _Schedule:
 
 
 class RhythmEngine:
-    def __init__(self, song: Song, tempo: float, tolerance_cents: float, hop_s: float, start_index: int = 0):
+    def __init__(self, song: Song, tempo: float, tolerance_cents: float, hop_s: float, start_index: int = 0,
+                 end_index: int | None = None):
         self.song = song
+        self.end_index = len(song.events) if end_index is None else end_index  # exclusive
         self.tempo = tempo
         self.tolerance_cents = tolerance_cents
         self.hop_s = hop_s
@@ -96,7 +98,7 @@ class RhythmEngine:
 
     @property
     def finished(self) -> bool:
-        return self.position >= len(self.song.events)
+        return self.position >= self.end_index
 
     @property
     def event(self) -> Event:
@@ -109,7 +111,7 @@ class RhythmEngine:
         schedule = _Schedule(count_in_start, beat, first)
         self._scheduled_from = self.position
         origin = self.song.events[self.position].start
-        for event in self.song.events[self.position:]:
+        for event in self.song.events[self.position:self.end_index]:
             start = first + seconds(event.start - origin, self.tempo)
             duration = seconds(event.duration, self.tempo)
             schedule.events[event.index] = _EventState(
@@ -142,7 +144,7 @@ class RhythmEngine:
         schedule = self.schedule_data
         if schedule is None:
             return []
-        last = schedule.events[len(self.song.events) - 1].end
+        last = schedule.events[self.end_index - 1].end
         count = math.ceil((last - schedule.count_in_start) / schedule.beat - 1e-9)
         return [schedule.count_in_start + i * schedule.beat for i in range(count)]
 
@@ -154,8 +156,11 @@ class RhythmEngine:
 
     def current_credit(self) -> tuple[float, float]:
         """Credited and required (80 percent) seconds of the current event."""
-        if self.finished or self.schedule_data is None:
+        if self.finished:
             return 0.0, 0.0
+        if self.schedule_data is None:
+            duration = seconds(self.event.duration, self.tempo)
+            return 0.0, frames_for(config.RHYTHM_THRESHOLD_FRACTION * duration, self.hop_s) * self.hop_s
         state = self.schedule_data.events[self.position]
         return state.credit_frames * self.hop_s, state.required_frames * self.hop_s
 
