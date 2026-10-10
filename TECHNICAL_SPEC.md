@@ -1,0 +1,362 @@
+# Whistle Trainer Technical Specification
+
+This document describes how Whistle Trainer is built. Product behavior, UI, assessment rules, and default values are defined in [PROJECT_SPEC.md](PROJECT_SPEC.md); when the two disagree, the product specification wins and this document must be corrected.
+
+## Decisions
+
+| Area | Decision |
+| --- | --- |
+| Language and UI | Python 3.12 with PySide6 (Qt 6). |
+| Audio I/O | `sounddevice` (PortAudio), using the PulseAudio/PipeWire host API. |
+| Signal processing | NumPy; pitch detection with the YIN algorithm. |
+| Song format | MusicXML subset (single melodic line), parsed with the standard library. |
+| Bundled songs | Public domain: Ode to Joy, Twinkle Twinkle Little Star, Frère Jacques, plus an introductory exercise. |
+| Score rendering | Custom QPainter drawing with the Bravura SMuFL music font (SIL Open Font License). |
+| Octave display | Written one octave below sounding pitch; note names show the sounding octave. |
+| Listen tone | Synthesized whistle-like tone generated in the app. |
+| Window layout | One window with switchable pages. |
+| UI language | English only; all user-facing strings kept in one module. |
+| Platform and install | Ubuntu 24.04 with PipeWire as the reference system; run from source via a setup script and desktop launcher. |
+| Testing | pytest with synthetic audio for assessment rules, pytest-qt smoke tests, and a manual microphone checklist. |
+
+## Project layout
+
+```
+whistle_trainer/
+  __main__.py            Entry point: python -m whistle_trainer
+  app.py                 QApplication, main window, page navigation, service wiring
+  strings.py             All user-facing text
+  config.py              Default values from the product spec, in one place
+  music/
+    model.py             Song, Event, Pitch, TimeSignature, KeySignature
+    musicxml.py          MusicXML subset parser and validation
+    transpose.py         Transposition and enharmonic spelling
+    timing.py            Beats to seconds, event schedule
+  audio/
+    devices.py           Input/output device listing and monitoring
+    capture.py           Input stream and frame queue
+    playback.py          Output stream, mixer, scheduled sounds
+    synth.py             Whistle tone and metronome click synthesis
+  pitch/
+    yin.py               YIN pitch estimator
+    analyzer.py          Framing, level, frame classification
+    display.py           Smoothed "detected note" for the UI
+    calibration.py       Audio setup measurements and thresholds
+  assessment/
+    frames.py            AnalysisFrame and frame classes
+    guided.py            Guided mode engine
+    rhythm.py            Continuous rhythm mode engine
+    session.py           Drives an engine, owns position, retries, pause/resume
+  storage/
+    settings.py          Settings persistence
+    progress.py          Per-song, per-mode progress persistence
+  ui/
+    pages/               library.py, setup.py, listen.py, practice.py, summary.py
+    score_view.py        Staff rendering, highlighting, scrolling, note selection
+    pitch_meter.py       Pitch direction and tolerance display
+    hold_indicator.py    Hold and rest progress
+    beat_indicator.py    Count-in and visual beats
+    level_meter.py       Input activity meter
+  resources/
+    songs/*.musicxml
+    fonts/Bravura.otf
+tests/
+scripts/
+  setup.sh               Creates .venv and installs dependencies
+  install-desktop.sh     Installs a .desktop launcher for the current user
+run.sh                   Starts the app from the project's .venv
+requirements.txt         Pinned dependency versions
+```
+
+## Architecture
+
+The app has four layers, and dependencies only point downward:
+
+1. **UI** (`ui/`, `app.py`): Qt widgets and pages. Holds no assessment logic.
+2. **Session** (`assessment/session.py`, Listen player): coordinates a practice or listening session, exposes Qt signals to the UI.
+3. **Engines** (`assessment/guided.py`, `assessment/rhythm.py`, `pitch/`, `music/`): pure Python with no Qt or audio-device dependencies. Fully testable with synthetic input.
+4. **I/O** (`audio/`, `storage/`): devices and files.
+
+### Threads
+
+| Thread | Work |
+| --- | --- |
+| PortAudio input callback | Copies samples and their capture timestamp into a lock-free queue. Does nothing else. |
+| Analysis worker (QThread) | Drains the queue, runs pitch analysis, feeds frames to the active engine, emits results to the UI via queued Qt signals. |
+| PortAudio output callback | Mixes scheduled sounds (Listen notes, reference tones, metronome clicks) from a pre-rendered schedule. |
+| Qt main thread | UI rendering at display refresh rate; reads the latest state from signals. |
+
+Engines run on the analysis worker so that assessment never waits for UI rendering. UI commands (pause, retry, settings changes) are sent to the worker through a command queue and applied between frames.
+
+### Clock
+
+All timing uses one monotonic clock in seconds. Each input block is stamped with its ADC capture time from the PortAudio callback (`time.inputBufferAdcTime`), converted to the shared clock. Each analysis frame's timestamp is the capture time of the frame's center sample. Rhythm schedules, metronome clicks, and visual beats are all expressed on this clock. Output sounds are scheduled using `time.outputBufferDacTime` so that clicks are heard on the beat. Engines never read the system clock themselves; they only use frame timestamps, which makes them deterministic in tests.
+
+## Audio input and analysis
+
+### Capture
+
+- Mono, 48 kHz, float32, 256-sample blocks (about 5 ms). If the device does not support 48 kHz, use 44.1 kHz; analysis parameters are defined in milliseconds and converted.
+- Multi-channel inputs are mixed to mono.
+- Audio is held only in memory and discarded after analysis, as the product specification requires. Nothing is written to disk.
+
+### Frames
+
+- Analysis window 2048 samples (about 43 ms), hop 10 ms. Each hop produces one `AnalysisFrame`.
+- Before YIN, apply a band-pass filter of 400 Hz to 4.5 kHz to remove hum and hiss outside the whistle range.
+- Expected total delay from sound to screen: about 22 ms window center offset + 10 ms hop + up to 17 ms display refresh + device latency, which keeps the 150 ms visible feedback target.
+
+`AnalysisFrame` fields: `time`, `level_db` (RMS in dBFS), `f0_hz` (or none), `confidence` (0 to 1), `frame_class`.
+
+### Pitch detection (YIN)
+
+- Standard YIN with cumulative mean normalized difference, absolute threshold 0.15, and parabolic interpolation of the chosen lag.
+- Search range 450 Hz to 4.2 kHz, covering the supported whistle range (about A4 to C8) with margin.
+- `confidence = 1 - d'(τ)` at the chosen lag.
+- Octave errors: YIN picks the first dip under the threshold, which avoids most octave-down errors. A whistle is close to a pure tone, so octave errors are rare; tests must cover them anyway.
+
+### Frame classes
+
+Each frame is classified using the calibrated activity threshold:
+
+| Class | Condition |
+| --- | --- |
+| `QUIET` | `level_db` below the activity threshold. |
+| `PITCHED` | Level at or above the threshold, a pitch in range, and `confidence ≥ 0.8`. |
+| `UNCLEAR` | Level at or above the threshold but not `PITCHED`. |
+
+Assessment uses only frame classes, pitch, and timestamps. Loudness never passes a note on its own.
+
+### Detected note display
+
+The "reliable detected note" shown in the UI is smoothed separately from assessment: the median pitch of the last 5 `PITCHED` frames, changing the displayed note only after the new note has been stable for 50 ms. When no frame has been `PITCHED` for 150 ms, show "No clear pitch". This smoothing never feeds assessment, so it cannot delay or alter scoring.
+
+### Audio setup calibration
+
+1. **Silence:** record 3 seconds while the user stays quiet. Noise floor = 95th percentile of frame levels.
+2. **Steady whistle:** record until 1.5 seconds of `PITCHED`-quality frames are collected (provisional threshold: noise floor + 6 dB), up to 10 seconds. Whistle level = median level of those frames.
+3. **Threshold:** activity threshold = midpoint in dB between noise floor and whistle level, and at least noise floor + 6 dB.
+4. **Usability:** if the whistle is less than 12 dB above the noise floor, or no steady pitch is found, show the setup problem message from the product specification.
+5. **Optional range:** the user whistles comfortable low and high notes; the median pitch of each is stored as the practice range and used to suggest a transposition in the library.
+
+Calibration results are stored per input device.
+
+### Devices
+
+- List inputs and outputs from PortAudio's PulseAudio/PipeWire host API; identify devices by name, because indices change between sessions.
+- A saved device that is missing is shown as unavailable; the app never switches to another device by itself.
+- PortAudio does not report newly connected devices, so the device list is refreshed by reinitializing PortAudio when Audio setup opens or the user presses Refresh, and only while no stream is running.
+- A stream error or stopped callback while practicing is treated as input loss: the session pauses and shows the input problem message.
+
+## Music model and songs
+
+### Model
+
+- `Pitch`: MIDI number for the sounding pitch, plus spelling (step, alter) for display.
+- `Event`: a note or rest with its index, sounding pitch (notes only), total duration in quarter notes as a `Fraction`, and its notated parts. A tied chain is one `Event` whose notated parts are the individual written notes, so it is assessed as one hold but drawn as written.
+- `Song`: id (file name without extension), title, key signature, time signature, default tempo, events, measures, sounding range, and length in beats.
+
+### Timing
+
+`seconds = quarter_notes × 60 / tempo`, with tempo in quarter-note beats per minute. Event start times are cumulative sums of durations. The time signature only affects display and the metronome accent.
+
+### MusicXML subset
+
+Supported:
+
+- `score-partwise` with exactly one part and one voice.
+- `work-title` or `movement-title` for the title.
+- `divisions`, `key`, `time`, `clef` (treble only), `transpose` (`chromatic` and `octave-change`).
+- `note` with `pitch` (step, alter, octave) or `rest`, `duration`, `type`, `dot`, `tie` (start/stop), and `measure` boundaries.
+- `sound tempo` or `metronome` for the default tempo; 60 if missing.
+
+Sounding pitch = written pitch + `chromatic` + 12 × `octave-change`. Bundled songs are written an octave below sounding pitch with `octave-change` 1, matching the score display decision. Files without a `transpose` element are interpreted the same way, so that songs exported from MuseScore with a plain treble instrument also display correctly.
+
+Anything else that affects the melody (chords, multiple voices or parts, grace notes, tuplets, repeats, pickup measures with partial durations other than a valid anacrusis) is rejected with a clear message naming the file and measure. Dynamics, lyrics, slurs, and layout elements are ignored. The parser validates that each measure's durations match the time signature, except for a first-measure anacrusis.
+
+### Bundled arrangements
+
+All in 4/4 and G major, sounding within D5 to E6, default tempo 60:
+
+| Song | Sounding range | Notes |
+| --- | --- | --- |
+| Introductory exercise | G5 to B5 | Whole, half, and quarter notes; a tied note; a repeated note; a rest. |
+| Twinkle Twinkle Little Star | G5 to E6 | Quarter and half notes. |
+| Ode to Joy | D5 to D6 | Includes the dotted quarter and eighth. |
+| Frère Jacques | D5 to E6 | Includes the eighth-note phrase. |
+
+The shortest note is an eighth (0.5 seconds at 60 bpm), following the product specification's caution about very short notes.
+
+### Transposition
+
+- Range −12 to +12 semitones in half steps, default 0.
+- Transposing shifts every sounding pitch and the key signature. The new key is the one with the fewest accidentals for the transposed tonic (for example F♯ major rather than G♭ major, F major rather than E♯ major), and notes are spelled in that key.
+- The library suggests the transposition that best centers the song's range inside the user's measured practice range, if one was measured. It is shown as a suggestion only.
+
+## Assessment engines
+
+Both engines are state machines with the same interface:
+
+```python
+class Engine:
+    def start(self, event_index: int, at_time: float) -> None: ...
+    def feed(self, frame: AnalysisFrame) -> list[EngineUpdate]: ...
+    def suspend(self) -> None: ...   # pause, reference playback, settings change
+```
+
+`EngineUpdate` reports hold progress, pitch deviation in cents, guidance text key, event passed, event failed (with reason), and retry counted. The session layer turns updates into Qt signals, advances the position, and records progress.
+
+All thresholds come from `config.py`, using the product specification's defaults: pitch tolerance (Easy ±40 cents, Standard ±25 cents), stable pitch confirmation 100 ms, grace period 100 ms, repeated-note release 100 ms, onset window 20 percent of duration capped at 150 ms, hold and rest threshold 80 percent.
+
+### Shared definitions
+
+- **Accepted frame:** `PITCHED`, and within the tolerance of the target's sounding pitch: `|1200 × log2(f0 / f_target)| ≤ tolerance`. An octave error is about 1200 cents off, so it can never be accepted.
+- **Stable confirmation:** an uninterrupted run of accepted frames lasting the confirmation time (capped at the event's duration). When confirmation completes, credit for the whole run, including the confirmation time, is added at once.
+- **Interruption:** any non-accepted frame after confirmation. Credit does not grow during an interruption. If it lasts longer than the grace period, it becomes a failure (rhythm) or reset (guided).
+- **Attack:** the start of an accepted run that began after a release. A **release** is at least 100 ms in which no frame is `PITCHED` or `UNCLEAR`. Each note event needs its own attack if it has the same pitch as the previous note; the previous note's run cannot carry over. When the pitch changes, a new accepted run counts as an attack without a release.
+- **Quiet frame (rests):** `QUIET`. Any `PITCHED` or `UNCLEAR` frame interrupts rest credit.
+
+### Guided engine
+
+Per note event:
+
+1. **Waiting:** no penalty for silence, unclear input, or wrong pitches before a confirmed attempt. Pitch guidance ("Whistle higher/lower") is shown for `PITCHED` frames.
+2. **Confirming:** accepted frames accumulate; a non-accepted frame before confirmation returns to Waiting without counting a retry.
+3. **Holding:** credit grows with each accepted frame's hop time. Credit reaching the required duration passes the event immediately.
+4. **Interrupted:** credit is frozen. Recovery within the grace period continues Holding. Exceeding the grace period resets credit, counts one retry, and returns to Waiting (or Confirming if the interrupting input was itself the start of a new accepted run after a release).
+
+Rest events use the same structure with quiet frames instead of accepted frames, no confirmation step, and no retries counted for silence that has not started.
+
+### Rhythm engine
+
+On start, the engine builds a schedule: four count-in beats, then each event `i` with start `s_i` and end `e_i`, from the selected position onward.
+
+Per note event:
+
+- **Onset window:** `w = min(0.2 × duration, 150 ms)`. Input before `s_0 − w` is ignored (warm-up).
+- **Onset:** the start time of the first accepted run that completes stable confirmation (back-dated to the run's first frame). The event fails as "late or missing start" if no onset falls inside `[s_i − w, s_i + w]`, as soon as `s_i + w` passes without one.
+- **Credit:** only accepted time inside `[s_i, e_i]` counts. Early pitch establishes the onset but earns no credit.
+- **Interruption failure:** after the onset and until credit reaches 80 percent of the duration, an interruption longer than the grace period fails the event as "note interrupted". After reaching 80 percent, the user may release early without penalty, which also leaves time for the release before a repeated note.
+- **Result:** at `e_i`, the event passes if credit is at least 80 percent of the duration; otherwise it fails as "note too short". Passing never happens before `e_i`.
+
+Rest events pass at `e_i` if quiet credit inside the interval is at least 80 percent and no active or unclear stretch exceeded the grace period; otherwise they fail as "rest not quiet".
+
+On failure, the engine stops, the beat stops, and the session shows the reason with Retry. Retry rebuilds the schedule from the failed event with a new count-in.
+
+### Reference playback and self-hearing protection
+
+While the app is playing any sound in a practice session (Hear target note, metronome excluded), input frames are discarded from assessment until 300 ms after the sound ends. Unfinished hold progress is reset afterwards. In rhythm mode, Hear target note is only available while stopped.
+
+The metronome click is short (20 ms) and broadband, so it is classified as `UNCLEAR` or `QUIET` rather than accepted; the product specification recommends headphones for it. This is covered by a test with the click mixed into a synthetic whistle.
+
+## Sound output
+
+### Whistle synthesis
+
+Each note is rendered on demand at 48 kHz:
+
+- Sine at the sounding frequency, plus a second harmonic at −30 dB.
+- Vibrato: 5 Hz, ±8 cents, fading in after 200 ms.
+- Envelope: 15 ms attack, 40 ms release; tied notes are one sound.
+- Breath noise: band-pass filtered noise around the fundamental at −35 dB.
+- Output at a fixed level of −12 dBFS peak.
+
+The metronome click is a 20 ms decaying burst at 2 kHz for beat one and 1.5 kHz for other beats.
+
+### Playback service
+
+A single output stream on the selected output device (default: system default) mixes scheduled sounds. Sounds are queued with a start time on the shared clock; the service reports the actual start time of each played note so the UI can keep the highlight in sync. Stopping clears the queue with a 10 ms fade-out to avoid clicks.
+
+### Listen mode player
+
+- **Play song:** schedules all events from the current position at the selected tempo and transposition. The highlight follows each event's scheduled start. Stop keeps the position on the last played event; Play resumes from there, or from the beginning after the end.
+- **Next/Previous note and clicking a note:** stop any current playback, move the position, and play that single event; rests are highlighted silently.
+- Input capture is never started in Listen mode, and no progress is changed.
+
+## User interface
+
+### Pages
+
+A single `QMainWindow` with a `QStackedWidget`:
+
+| Page | Notes |
+| --- | --- |
+| Library | Song list with length, range, and progress; preparation panel with mode, tempo, difficulty, transposition (with suggestion), Listen, Start, and Audio setup. The introductory exercise is listed first. |
+| Audio setup | Input and output selectors with Refresh, live level meter, detected note, step-by-step calibration with status text. |
+| Listen | Score view and Listen controls. |
+| Practice | Score view, target note and octave, detected note, pitch meter, hold indicator, beat indicator (rhythm), listening indicator, and controls. |
+| Summary | Results from the session and Repeat, Restart, Library. |
+
+A header bar shows the page title, a Back button, and the listening indicator whenever capture is active.
+
+### Score view
+
+- Custom `QWidget` drawn with `QPainter`. The melody is laid out as one continuous staff line that scrolls horizontally; the current event is kept about one third from the left, with smooth animated scrolling.
+- Glyphs come from the Bravura font (SMuFL code points): clef, key and time signatures, note heads, stems, flags, beams for eighth-note pairs, dots, ties, rests, accidentals, and ledger lines.
+- Note spacing is proportional to duration with a minimum width so note names fit.
+- Note names are drawn below each note with the sounding octave (for example "B5") and can be hidden in settings.
+- States are shown with color and shape: current event (highlight box and bold), completed (filled check mark), failed (cross), upcoming (normal). Colors come from the Qt palette so light and dark system themes both work.
+- Clicking or tapping a note selects it (Listen, and Practice while paused).
+
+### Practice widgets
+
+- **Pitch meter:** horizontal scale of ±100 cents around the target, with the tolerance band shaded and a marker for the current pitch; arrow and text "Whistle higher" or "Whistle lower" outside the band.
+- **Hold indicator:** progress bar filling with credited time; frozen during grace interruptions, with the text "Keep going" while frozen.
+- **Beat indicator:** four dots pulsing on the beat; count-in numbers shown large.
+
+### Keyboard shortcuts
+
+Space: Play/Stop in Listen, Pause/Resume in Practice. Left and Right arrows: Previous and Next note in Listen. H: Hear target note. R: Retry. Escape: Back to Library.
+
+## Persistence
+
+Files are stored using XDG directories through `platformdirs`:
+
+- `~/.config/whistle-trainer/settings.json`: devices, calibration per input, notation preference, last used mode, difficulty, tempo, and transposition per song.
+- `~/.local/share/whistle-trainer/progress.json`: per song id and mode: completed event indices, next unfinished event index, retry counts per event, active practice time, and completion records with dates.
+
+Both files include a `schema_version`. Writes are atomic (write to a temporary file, then rename). A corrupt file is renamed with a `.corrupt` suffix and replaced by defaults, with a message to the user. If a song file changes so that its event count differs from saved progress, that song's progress is reset with a message.
+
+## Testing
+
+### Automated (pytest)
+
+- **YIN:** pure and noisy sines across the whistle range are detected within 5 cents; noise alone gives low confidence; a sine with a strong second harmonic is not reported an octave high.
+- **Frame classification and calibration:** synthetic noise floors and whistle levels produce the expected thresholds and usability results.
+- **Engines:** frame sequences built by a test helper (for example "accepted 1000 ms at B5, quiet 80 ms, accepted 500 ms") are fed with timestamps. Every row of the product specification's acceptance table has at least one test: hold durations with confirmation, 80 ms dropout freeze, resets beyond the grace period, octave errors, repeated notes, ties, guided and rhythm rests, rhythm onset at ±150 ms and 250 ms late, 900 ms vs. 700 ms credit, no early advance at 800 ms, and retry after failure.
+- **Audio pipeline:** synthesized whistle audio (including vibrato, dropouts, and background noise) runs through the full analyzer and engine to confirm the same results as the frame-level tests.
+- **Self-hearing:** the playback synth's output fed back as input never passes a note.
+- **Music:** MusicXML parsing of all bundled songs, rejection of unsupported features, tie merging, transposition and spelling, schedule timing.
+- **Persistence:** round trip, atomic write, corrupt-file recovery, schema version.
+- **UI smoke (pytest-qt):** each page opens, navigation works, Listen mode drives the highlight with a fake playback clock.
+
+### Manual checklist
+
+Kept in `tests/MANUAL_CHECKS.md`: setup with a built-in and a USB microphone, quiet room and background noise (fan, music at low volume), reference playback through speakers, unplugging the input during practice, full run of each song in both modes. Record microphones, settings, measured whistle ranges, and limitations, as the product specification requires.
+
+## Installation and running
+
+- System packages on Ubuntu 24.04: `python3-venv`, `libportaudio2`, `libxcb-cursor0` (needed by Qt 6 on X11).
+- `scripts/setup.sh` checks for these, creates `.venv`, and installs pinned versions from `requirements.txt` (PySide6, sounddevice, numpy, platformdirs; pytest and pytest-qt as development dependencies).
+- `./run.sh` starts the app; `scripts/install-desktop.sh` adds a launcher to the application menu.
+- The app works offline; there is no network access at runtime.
+
+## Implementation milestones
+
+These follow the product specification's delivery order:
+
+1. **Foundation:** project skeleton, config, music model, MusicXML parser, bundled songs, persistence.
+2. **Pitch prototype:** capture, YIN, frame classification, calibration page, single-note practice with pitch meter. Validate whistle range, responsiveness, and tolerances with a real microphone; update defaults in both specifications if needed.
+3. **Guided mode:** guided engine with durations, interruptions, repeated notes, ties, and rests; practice page.
+4. **Rhythm mode:** schedule, count-in, metronome, rhythm engine, Retry.
+5. **Complete app:** full score view, library, transposition, Listen mode, summaries, progress.
+6. **Release:** setup scripts, desktop launcher, manual checklist on the reference system.
+
+## Remaining validation
+
+These need measurements during milestone 2 rather than decisions now:
+
+- Comfortable whistle range of real users and whether D5 to E6 suits most people.
+- Whether the YIN confidence threshold of 0.8 and the activity threshold formula work with typical microphones and noise.
+- Real input-to-display latency on the reference system.
+- Minimum practical note duration for reliable acceptance.
