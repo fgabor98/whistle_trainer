@@ -147,6 +147,7 @@ class HoldIndicator(QProgressBar):
         self.setTextVisible(True)
         self.set_progress(0.0, 0.0, 1.0)
 
-    def set_progress(self, fraction: float, seconds: float, required: float) -> None:
+    def set_progress(self, fraction: float, seconds: float, required: float,
+                     label: str = strings.HOLD_LABEL) -> None:
         self.setValue(round(min(max(fraction, 0.0), 1.0) * 1000))
-        self.setFormat(strings.TEST_HOLD_LABEL.format(seconds=seconds, required=required))
+        self.setFormat(label.format(seconds=seconds, required=required))

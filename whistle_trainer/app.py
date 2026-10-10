@@ -24,6 +24,7 @@ from whistle_trainer.music.library import SongLibrary, load_songs
 from whistle_trainer.storage.progress import ProgressStore
 from whistle_trainer.storage.settings import SettingsStore
 from whistle_trainer.ui.pages.library import LibraryPage
+from whistle_trainer.ui.pages.practice import PracticePage
 from whistle_trainer.ui.pages.setup import SetupPage
 from whistle_trainer.ui.pages.test_input import TestInputPage
 
@@ -56,16 +57,21 @@ class MainWindow(QMainWindow):
         header.addWidget(self.listening_label)
 
         self.pages = QStackedWidget()
-        self.library_page = LibraryPage(library)
+        self.library_page = LibraryPage(library, settings)
         self.library_page.song_selected.connect(self._on_song_selected)
+        self.library_page.start_requested.connect(self.start_practice)
         self.library_page.audio_setup_requested.connect(lambda: self.show_page(self.setup_page))
         self.setup_page = SetupPage(devices, audio, settings)
         self.setup_page.test_input_requested.connect(lambda: self.show_page(self.test_input_page))
         self.test_input_page = TestInputPage(devices, audio, settings)
+        self.practice_page = PracticePage(devices, audio, settings)
+        self.practice_page.audio_setup_requested.connect(lambda: self.show_page(self.setup_page))
+        self.practice_page.library_requested.connect(self.show_library)
         self.page_titles = {
             self.library_page: strings.PAGE_LIBRARY,
             self.setup_page: strings.PAGE_AUDIO_SETUP,
             self.test_input_page: strings.PAGE_TEST_INPUT,
+            self.practice_page: "",
         }
         for page in self.page_titles:
             self.pages.addWidget(page)
@@ -91,8 +97,18 @@ class MainWindow(QMainWindow):
         self.pages.setCurrentWidget(page)
         if hasattr(page, "activate"):
             page.activate()
-        self.title_label.setText(self.page_titles[page])
+        self.title_label.setText(page.title() if hasattr(page, "title") else self.page_titles[page])
         self.back_button.setVisible(bool(self.history))
+
+    def show_library(self) -> None:
+        self.show_page(self.library_page, remember=False)
+        self.history.clear()
+        self.back_button.hide()
+
+    def start_practice(self, song_id: str) -> None:
+        song = self.library.get(song_id)
+        self.practice_page.load(song, self.settings.settings.preferences_for(song.id, song.tempo))
+        self.show_page(self.practice_page)
 
     def go_back(self) -> None:
         if self.history:

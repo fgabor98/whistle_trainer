@@ -1,23 +1,29 @@
-"""Song library page."""
+"""Song library page with the preparation panel."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QComboBox,
+    QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QPushButton,
+    QSpinBox,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from whistle_trainer import strings
+from whistle_trainer import config, strings
+from whistle_trainer.config import Difficulty
 from whistle_trainer.music.library import SongLibrary
 from whistle_trainer.music.model import Song
 from whistle_trainer.music.timing import song_seconds
+from whistle_trainer.storage.settings import SettingsStore, SongPreferences
 
 
 def format_length(total_seconds: float) -> str:
@@ -27,11 +33,14 @@ def format_length(total_seconds: float) -> str:
 
 class LibraryPage(QWidget):
     song_selected = Signal(str)  # song id
+    start_requested = Signal(str)  # song id
     audio_setup_requested = Signal()
 
-    def __init__(self, library: SongLibrary, parent: QWidget | None = None):
+    def __init__(self, library: SongLibrary, settings: SettingsStore, parent: QWidget | None = None):
         super().__init__(parent)
         self.library = library
+        self.store = settings
+        self.song: Song | None = None
 
         self.song_list = QTreeWidget()
         self.song_list.setRootIsDecorated(False)
@@ -44,30 +53,69 @@ class LibraryPage(QWidget):
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         for song in library.songs:
             self.song_list.addTopLevelItem(self._song_item(song))
-        self.song_list.currentItemChanged.connect(self._on_current_changed)
+        self.song_list.itemActivated.connect(lambda _item, _column: self._start())
 
         hint = QLabel(strings.LIBRARY_LENGTH_HINT)
         hint.setWordWrap(True)
-
-        self.audio_setup_button = QPushButton(strings.LIBRARY_AUDIO_SETUP)
-        self.audio_setup_button.clicked.connect(self.audio_setup_requested)
-        buttons = QHBoxLayout()
-        buttons.addStretch()
-        buttons.addWidget(self.audio_setup_button)
-
-        layout = QVBoxLayout(self)
-        layout.addWidget(self.song_list)
-        layout.addWidget(hint)
-        layout.addLayout(buttons)
-
+        songs = QVBoxLayout()
+        songs.addWidget(self.song_list)
+        songs.addWidget(hint)
         if not library.songs:
-            layout.insertWidget(0, QLabel(strings.LIBRARY_NO_SONGS))
+            songs.insertWidget(0, QLabel(strings.LIBRARY_NO_SONGS))
         if library.errors:
             details = "\n".join(str(error) for error in library.errors)
             errors = QLabel(f"{strings.LIBRARY_LOAD_ERRORS}\n{details}")
             errors.setWordWrap(True)
             errors.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            layout.addWidget(errors)
+            songs.addWidget(errors)
+
+        self.song_title = QLabel()
+        title_font = self.song_title.font()
+        title_font.setPointSizeF(title_font.pointSizeF() * 1.3)
+        title_font.setBold(True)
+        self.song_title.setFont(title_font)
+        self.song_title.setWordWrap(True)
+        self.mode_label = QLabel(strings.LIBRARY_MODE_GUIDED)
+        self.mode_label.setWordWrap(True)
+        self.tempo_spin = QSpinBox()
+        self.tempo_spin.setRange(config.MIN_TEMPO, config.MAX_TEMPO)
+        self.tempo_spin.setSuffix(strings.LIBRARY_TEMPO_SUFFIX)
+        self.tempo_spin.valueChanged.connect(self._on_preferences_changed)
+        self.difficulty_combo = QComboBox()
+        for difficulty in Difficulty:
+            self.difficulty_combo.addItem(strings.DIFFICULTY_NAMES[difficulty], difficulty)
+        self.difficulty_combo.currentIndexChanged.connect(self._on_preferences_changed)
+        self.estimate_label = QLabel()
+        self.estimate_label.setWordWrap(True)
+        self.start_button = QPushButton(strings.LIBRARY_START)
+        self.start_button.setDefault(True)
+        self.start_button.clicked.connect(self._start)
+        self.audio_setup_button = QPushButton(strings.LIBRARY_AUDIO_SETUP)
+        self.audio_setup_button.clicked.connect(self.audio_setup_requested)
+
+        form = QFormLayout()
+        form.addRow(strings.LIBRARY_MODE, self.mode_label)
+        form.addRow(strings.LIBRARY_TEMPO, self.tempo_spin)
+        form.addRow(strings.LIBRARY_DIFFICULTY, self.difficulty_combo)
+        panel = QGroupBox()
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.addWidget(self.song_title)
+        panel_layout.addLayout(form)
+        panel_layout.addWidget(self.estimate_label)
+        panel_layout.addWidget(self.start_button)
+        panel_layout.addStretch()
+        panel_layout.addWidget(self.audio_setup_button)
+        panel.setMinimumWidth(300)
+
+        layout = QHBoxLayout(self)
+        layout.addLayout(songs, stretch=2)
+        layout.addWidget(panel, stretch=1)
+
+        self.song_list.currentItemChanged.connect(self._on_current_changed)
+        if self.song_list.topLevelItemCount():
+            self.song_list.setCurrentItem(self.song_list.topLevelItem(0))
+        else:
+            self._on_current_changed(None, None)
 
     def _song_item(self, song: Song) -> QTreeWidgetItem:
         item = QTreeWidgetItem([
@@ -78,13 +126,50 @@ class LibraryPage(QWidget):
         item.setData(0, Qt.ItemDataRole.UserRole, song.id)
         return item
 
-    def _on_current_changed(self, current: QTreeWidgetItem | None, _previous) -> None:
-        if current is not None:
-            self.song_selected.emit(current.data(0, Qt.ItemDataRole.UserRole))
-
     def select_song(self, song_id: str) -> None:
         for i in range(self.song_list.topLevelItemCount()):
             item = self.song_list.topLevelItem(i)
             if item.data(0, Qt.ItemDataRole.UserRole) == song_id:
                 self.song_list.setCurrentItem(item)
                 return
+
+    def preferences(self) -> SongPreferences | None:
+        if self.song is None:
+            return None
+        return self.store.settings.preferences_for(self.song.id, self.song.tempo)
+
+    def _on_current_changed(self, current: QTreeWidgetItem | None, _previous) -> None:
+        self.song = self.library.get(current.data(0, Qt.ItemDataRole.UserRole)) if current else None
+        preferences = self.preferences()
+        for widget in (self.tempo_spin, self.difficulty_combo, self.start_button):
+            widget.setEnabled(self.song is not None)
+        if self.song is None:
+            self.song_title.setText("")
+            self.estimate_label.setText("")
+            return
+        self.song_title.setText(self.song.title)
+        for widget in (self.tempo_spin, self.difficulty_combo):
+            widget.blockSignals(True)
+        self.tempo_spin.setValue(preferences.tempo)
+        self.difficulty_combo.setCurrentIndex(self.difficulty_combo.findData(preferences.difficulty))
+        for widget in (self.tempo_spin, self.difficulty_combo):
+            widget.blockSignals(False)
+        self._update_estimate()
+        self.song_selected.emit(self.song.id)
+
+    def _on_preferences_changed(self) -> None:
+        preferences = self.preferences()
+        if preferences is None:
+            return
+        preferences.tempo = self.tempo_spin.value()
+        preferences.difficulty = self.difficulty_combo.currentData()
+        self.store.save()
+        self._update_estimate()
+
+    def _update_estimate(self) -> None:
+        length = format_length(song_seconds(self.song, self.tempo_spin.value()))
+        self.estimate_label.setText(strings.LIBRARY_ESTIMATE.format(length=length))
+
+    def _start(self) -> None:
+        if self.song is not None:
+            self.start_requested.emit(self.song.id)

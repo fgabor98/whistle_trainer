@@ -37,8 +37,21 @@ Checks that need a real microphone and a real whistle. Run them on the reference
 - Whether Easy (±40 cents) and Standard (±25 cents) feel fair.
 - Notes that were hard to detect, or a detected note that jumped around.
 
+## Milestone 3: guided practice
+
+1. In the library, select a song, change its tempo and difficulty, and restart the app: the choices are remembered per song. The estimated length changes with the tempo.
+2. Press **Start practice** without setting up the microphone: the page explains this and offers **Audio setup…**.
+3. Practice the **Introductory exercise** at 60 bpm. The score scrolls smoothly and keeps the current note highlighted; completed notes get a check mark.
+4. Whistle each note for its written length: whole notes need 4 seconds, half notes 2, quarter notes 1 at 60 bpm.
+5. At a rest ("Take a breath"), stay quiet for its length; whistling during the rest does not let it pass.
+6. At the repeated B5 notes, keep whistling: the second B5 does not pass until you stop briefly ("Stop briefly, then whistle this note again").
+7. The tied A5 needs one continuous hold of both notes together.
+8. Press **Pause** halfway through a note: listening stops and that note starts over on **Resume**.
+9. Practice **Ode to Joy** and **Frère Jacques** to the end: the completion message shows practice time and retries.
+10. Unplug the microphone during practice: practice pauses with an explanation and does not resume by itself.
+
 ## Results
 
 | Date | Microphone | Room | Background / whistle / threshold (dB) | Range | Notes |
 | --- | --- | --- | --- | --- | --- |
-| | | | | | |
+| 2026-10-10 | (not recorded) | | | | Easy ±40 and Standard ±25 cents feel fair. |

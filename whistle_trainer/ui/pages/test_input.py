@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import math
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QComboBox, QFormLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
@@ -16,6 +14,7 @@ from whistle_trainer.config import Difficulty
 from whistle_trainer.music.transpose import spell_midi
 from whistle_trainer.pitch.display import NoteDisplay
 from whistle_trainer.storage.settings import SettingsStore
+from whistle_trainer.ui.guidance import guide_text, smoothed_cents
 from whistle_trainer.ui.meters import HoldIndicator, PitchMeter
 from whistle_trainer.ui.pages.setup import describe_detected
 
@@ -149,7 +148,7 @@ class TestInputPage(QWidget):
             self.hold.feed(frame)
             self.display.feed(frame)
             self.last_class = frame.frame_class
-        self._update(self._smoothed_cents())
+        self._update(smoothed_cents(self.display, self.target_hz))
 
     def _on_failed(self, problem: str) -> None:
         if self.active:
@@ -157,36 +156,17 @@ class TestInputPage(QWidget):
             self.display.reset()
             self._update(None)
 
-    def _smoothed_cents(self) -> float | None:
-        note = self.display.current
-        return None if note is None else 1200 * math.log2(note.frequency / self.target_hz)
-
     def guide_text(self, cents: float | None) -> str:
         if self.message is not None:
             return self.message
-        status = self.hold.status
-        if status is HoldStatus.PASSED:
+        if self.hold.status is HoldStatus.PASSED:
             return strings.TEST_PASSED
-        if status is HoldStatus.INTERRUPTED:
-            return strings.GUIDE_KEEP_GOING
-        if status in (HoldStatus.CONFIRMING, HoldStatus.HOLDING):
-            return strings.GUIDE_HOLD
-        if self.last_class is FrameClass.UNCLEAR:
-            return strings.GUIDE_NO_CLEAR_PITCH
-        if self.last_class is FrameClass.PITCHED and cents is not None:
-            if cents > self.tolerance:
-                return strings.GUIDE_WHISTLE_LOWER
-            if cents < -self.tolerance:
-                return strings.GUIDE_WHISTLE_HIGHER
-            return strings.GUIDE_HOLD
-        return strings.GUIDE_START_WHEN_READY
+        return guide_text(self.hold.status, self.last_class, cents, self.tolerance)
 
     def _update(self, cents: float | None) -> None:
         self.detected_label.setText(describe_detected(self.display))
         self.pitch_meter.set_cents(cents)
-        self.hold_indicator.set_progress(
-            self.hold.credit_frames / self.hold.required_frames, self.hold.credit_s, config.TEST_NOTE_HOLD_S
-        )
+        self.hold_indicator.set_progress(self.hold.progress, self.hold.credit_s, config.TEST_NOTE_HOLD_S)
         self.guide_label.setText(self.guide_text(cents))
         enabled = self.message is None
         self.target_combo.setEnabled(enabled)

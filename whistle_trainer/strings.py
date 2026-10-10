@@ -80,7 +80,6 @@ TEST_TRY_AGAIN = "Try again"
 TEST_TARGET_LABEL = "Whistle {note}"
 TEST_PASSED = "✓ Well done! Press Try again or choose another note."
 TEST_NOT_SET_UP = "Set up this input first on the Audio setup page."
-TEST_HOLD_LABEL = "Hold: {seconds:.1f} of {required:.1f} s"
 
 DIFFICULTY_NAMES = {"easy": "Easy", "standard": "Standard"}
 
@@ -94,3 +93,36 @@ GUIDE_START_WHEN_READY = "Start whenever you are ready."
 DETECTED_NONE = "No clear pitch"
 DETECTED_NOTE = "{note} ({cents:+.0f} cents)"
 LEVEL_DB = "{level:.0f} dB"
+
+LIBRARY_TEMPO = "Tempo:"
+LIBRARY_TEMPO_SUFFIX = " bpm"
+LIBRARY_DIFFICULTY = "Difficulty:"
+LIBRARY_MODE = "Mode:"
+LIBRARY_MODE_GUIDED = "Guided: the song waits for each note"
+LIBRARY_START = "Start practice"
+LIBRARY_ESTIMATE = "About {length} at this tempo, not counting waiting and retries."
+
+PRACTICE_TARGET_NOTE = "Whistle {note}"
+PRACTICE_TARGET_REST = "Rest"
+PRACTICE_PAUSE = "Pause"
+PRACTICE_RESUME = "Resume"
+PRACTICE_RESTART = "Restart song"
+PRACTICE_REPEAT = "Repeat"
+PRACTICE_LIBRARY = "Library"
+PRACTICE_AUDIO_SETUP = "Audio setup…"
+PRACTICE_PAUSED = "Paused. Press Resume to continue from the highlighted note."
+PRACTICE_NOT_SET_UP = "Set up your microphone before practicing."
+PRACTICE_INPUT_MISSING = "The microphone “{name}” is not connected. Connect it, or choose another input in Audio setup."
+PRACTICE_INPUT_LOST = (
+    "The microphone stopped working, so practice is paused. "
+    "Check that it is connected, then press Resume or open Audio setup."
+)
+PRACTICE_FINISHED = "✓ Song complete! Active practice time {time}, {retries} retries."
+PRACTICE_FINISHED_NO_RETRIES = "✓ Song complete with no retries! Active practice time {time}."
+PRACTICE_PROGRESS = "Note {current} of {total}"
+
+HOLD_LABEL = "Hold: {seconds:.1f} of {required:.1f} s"
+REST_LABEL = "Quiet: {seconds:.1f} of {required:.1f} s"
+
+GUIDE_TAKE_BREATH = "Take a breath"
+GUIDE_RELEASE = "Stop briefly, then whistle this note again"

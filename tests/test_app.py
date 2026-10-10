@@ -5,9 +5,11 @@ from fakes import BUILTIN, MIC, FakeAudio, FakeDevices
 from whistle_trainer import config, strings
 from whistle_trainer.app import MainWindow
 from whistle_trainer.audio.capture import InputProblem
+from whistle_trainer.config import Difficulty
 from whistle_trainer.music.library import load_songs
 from whistle_trainer.storage.progress import ProgressStore
 from whistle_trainer.storage.settings import Calibration, SettingsStore
+from whistle_trainer.ui.pages.practice import PracticeState
 
 B5 = 987.77
 
@@ -208,3 +210,145 @@ def test_test_input_standard_difficulty_is_stricter(window, audio, settings):
     audio.send(FrameScript().pitched(B5 * 2 ** (30 / 1200), 1.5).frames)
     assert page.guide_label.text() == strings.GUIDE_WHISTLE_LOWER
     assert page.hold_indicator.value() == 0
+
+
+# Library preparation panel and guided practice
+
+G5, A5, B5_HZ = 783.99, 880.0, 987.77
+
+
+def start_intro(window, settings, tempo=120):
+    calibrate(settings, MIC)
+    window.library_page.select_song("introductory-exercise")
+    window.library_page.tempo_spin.setValue(tempo)
+    window.library_page.start_button.click()
+    return window.practice_page
+
+
+def test_preparation_panel_saves_preferences(window, settings):
+    page = window.library_page
+    page.select_song("ode-to-joy")
+    assert page.song_title.text() == "Ode to Joy"
+    assert page.tempo_spin.value() == 60
+    assert page.estimate_label.text() == strings.LIBRARY_ESTIMATE.format(length="1:04")
+    page.tempo_spin.setValue(120)
+    page.difficulty_combo.setCurrentIndex(page.difficulty_combo.findData(Difficulty.STANDARD))
+    assert page.estimate_label.text() == strings.LIBRARY_ESTIMATE.format(length="0:32")
+    prefs = settings.settings.song_preferences["ode-to-joy"]
+    assert (prefs.tempo, prefs.difficulty) == (120, Difficulty.STANDARD)
+    page.select_song("frere-jacques")
+    assert page.tempo_spin.value() == 60
+    page.select_song("ode-to-joy")
+    assert page.tempo_spin.value() == 120
+
+
+def test_start_without_setup_explains(window, audio):
+    window.library_page.start_button.click()
+    page = window.practice_page
+    assert window.pages.currentWidget() is page
+    assert page.state is PracticeState.BLOCKED
+    assert page.guide_label.text() == strings.PRACTICE_NOT_SET_UP
+    assert page.setup_button.isVisibleTo(page) and not audio.running
+    page.setup_button.click()
+    assert window.pages.currentWidget() is window.setup_page
+
+
+def test_practice_starts_listening_and_shows_first_note(window, audio, settings):
+    page = start_intro(window, settings)
+    assert window.title_label.text() == "Introductory exercise"
+    assert audio.device_id == MIC.id and page.state is PracticeState.RUNNING
+    assert page.target_label.text() == strings.PRACTICE_TARGET_NOTE.format(note="G5")
+    assert page.progress_label.text() == strings.PRACTICE_PROGRESS.format(current=1, total=13)
+    assert page.score.current == 0
+    assert page.guide_label.text() == strings.GUIDE_START_WHEN_READY
+
+
+def intro_script(script: FrameScript) -> FrameScript:
+    """The introductory exercise performed correctly at 120 bpm (one beat = 0.5 s)."""
+    return (script.pitched(G5, 2.0)  # whole note G5
+            .pitched(A5, 1.0).quiet(1.0)  # half A5, half rest
+            .pitched(B5_HZ, 1.0).quiet(0.15).pitched(B5_HZ, 1.0)  # repeated half notes
+            .pitched(A5, 0.5).pitched(G5, 0.5).pitched(A5, 0.5).pitched(B5_HZ, 0.5)
+            .quiet(0.15).pitched(B5_HZ, 1.0)  # B5 again: a repeated note needs a breath
+            .pitched(A5, 2.0)  # tied A5 (half + half)
+            .quiet(1.0)  # half rest
+            .pitched(G5, 2.0))  # whole note G5
+
+
+def test_full_song_in_guided_mode(window, audio, settings):
+    page = start_intro(window, settings)
+    audio.send(intro_script(FrameScript()).frames)
+    assert page.state is PracticeState.FINISHED
+    assert page.engine.retries == {}
+    assert page.guide_label.text().startswith("✓ Song complete with no retries!")
+    assert not audio.running
+    assert page.repeat_button.isVisibleTo(page) and page.library_button.isVisibleTo(page)
+    assert not page.pause_button.isVisibleTo(page)
+    page.library_button.click()
+    assert window.pages.currentWidget() is window.library_page and window.back_button.isHidden()
+
+
+def test_practice_guidance_for_rests_and_repeated_notes(window, audio, settings):
+    page = start_intro(window, settings)
+    audio.send(FrameScript().pitched(G5, 2.0).pitched(A5, 1.0).frames)
+    assert page.target_label.text() == strings.PRACTICE_TARGET_REST
+    assert page.guide_label.text() == strings.GUIDE_TAKE_BREATH
+    assert page.hold_indicator.format().startswith("Quiet:")
+    audio.send(FrameScript().quiet(1.0).pitched(B5_HZ, 1.0).frames)
+    assert page.engine.position == 4
+    audio.send(FrameScript().pitched(B5_HZ, 0.2).frames)
+    assert page.guide_label.text() == strings.GUIDE_RELEASE
+    assert page.score.completed == {0, 1, 2, 3}
+
+
+def test_pause_resets_current_note_and_resume_restarts_listening(window, audio, settings):
+    page = start_intro(window, settings)
+    audio.send(FrameScript().pitched(G5, 2.0).pitched(A5, 0.6).frames)
+    assert page.engine.position == 1 and page.engine.tracker.credit_s > 0.5
+    page.pause_button.click()
+    assert page.state is PracticeState.PAUSED and not audio.running
+    assert page.engine.tracker.credit_s == 0 and page.engine.completed == {0}
+    assert page.guide_label.text() == strings.PRACTICE_PAUSED
+    assert page.pause_button.text() == strings.PRACTICE_RESUME
+    audio.send(FrameScript().pitched(A5, 2.0).frames)  # ignored while paused
+    assert page.engine.position == 1
+    page.pause_button.click()
+    assert audio.running and page.state is PracticeState.RUNNING
+
+
+def test_restart_begins_again(window, audio, settings):
+    page = start_intro(window, settings)
+    audio.send(FrameScript().pitched(G5, 2.0).frames)
+    page.restart_button.click()
+    assert page.engine.position == 0 and page.engine.completed == set()
+    assert page.score.completed == set() and audio.running
+
+
+def test_input_loss_pauses_practice(window, audio, settings):
+    page = start_intro(window, settings)
+    audio.send(FrameScript().pitched(G5, 1.0).frames)
+    audio.fail(InputProblem.LOST)
+    assert page.state is PracticeState.BLOCKED
+    assert page.guide_label.text() == strings.PRACTICE_INPUT_LOST
+    assert page.engine.tracker.credit_s == 0
+    assert not audio.running
+    page.pause_button.click()  # Resume
+    assert audio.running
+
+
+def test_leaving_practice_stops_listening_and_return_stays_paused(window, audio, settings):
+    page = start_intro(window, settings)
+    window.back_button.click()
+    assert not audio.running
+    window.show_page(page)
+    assert page.state is PracticeState.PAUSED and not audio.running
+
+
+def test_missing_microphone_blocks_practice(window, audio, devices, settings):
+    calibrate(settings, MIC)
+    devices.set_inputs([BUILTIN])
+    window.library_page.start_button.click()
+    page = window.practice_page
+    assert page.state is PracticeState.BLOCKED
+    assert page.guide_label.text() == strings.PRACTICE_INPUT_MISSING.format(name=MIC.name)
+    assert not audio.running

@@ -49,19 +49,22 @@ whistle_trainer/
     hold.py              Hold tracking for one target note (shared by the engines)
     guided.py            Guided mode engine
     rhythm.py            Continuous rhythm mode engine
-    session.py           Drives an engine, owns position, retries, pause/resume
+    session.py           Drives an engine, owns position, retries, pause/resume (with rhythm mode;
+                         until then the practice page drives the guided engine)
   storage/
     jsonfile.py          Atomic JSON writes and unreadable-file recovery
     settings.py          Settings persistence
     progress.py          Per-song, per-mode progress persistence
   ui/
     pages/               library.py, setup.py, test_input.py, listen.py, practice.py, summary.py
+    score_layout.py      Horizontal layout of the staff in staff spaces (no Qt)
     score_view.py        Staff rendering, highlighting, scrolling, note selection
+    guidance.py          Guidance text shared by Test input and Practice
     meters.py            Input level meter, pitch meter, hold indicator
     beat_indicator.py    Count-in and visual beats
   resources/
     songs/*.musicxml
-    fonts/Bravura.otf
+    fonts/Bravura.otf, fonts/OFL.txt   Music font and its license
 tests/
 scripts/
   setup.sh               Creates .venv and installs dependencies
@@ -197,16 +200,18 @@ The shortest note is an eighth (0.5 seconds at 60 bpm), following the product sp
 
 ## Assessment engines
 
-Both engines are state machines with the same interface:
+Both engines are state machines fed one frame at a time:
 
 ```python
-class Engine:
-    def start(self, event_index: int, at_time: float) -> None: ...
-    def feed(self, frame: AnalysisFrame) -> list[EngineUpdate]: ...
-    def suspend(self) -> None: ...   # pause, reference playback, settings change
+class GuidedEngine:
+    def start(self, event_index: int) -> None: ...      # make an event current
+    def feed(self, frame: AnalysisFrame) -> GuidedUpdate: ...
+    def reset_current(self) -> None: ...                # pause, reference playback, settings change
 ```
 
-`EngineUpdate` reports hold progress, pitch deviation in cents, guidance text key, event passed, event failed (with reason), and retry counted. The session layer turns updates into Qt signals, advances the position, and records progress.
+`GuidedUpdate` reports the assessed event, hold status and progress, pitch deviation in cents, whether a repeated note is waiting for a release, whether a retry was counted, and whether the song is finished. The engine keeps completed events and retries per event. The rhythm engine follows the same pattern and adds event failures with a reason.
+
+Hold timing lives in `HoldTracker` (`assessment/hold.py`), shared by notes, rests, and the Test input page. It counts credit in whole frames so long holds do not drift.
 
 All thresholds come from `config.py`, using the product specification's defaults: pitch tolerance (Easy ±40 cents, Standard ±25 cents), stable pitch confirmation 100 ms, grace period 100 ms, repeated-note release 100 ms, onset window 20 percent of duration capped at 150 ms, hold and rest threshold 80 percent.
 
@@ -225,9 +230,11 @@ Per note event:
 1. **Waiting:** no penalty for silence, unclear input, or wrong pitches before a confirmed attempt. Pitch guidance ("Whistle higher/lower") is shown for `PITCHED` frames.
 2. **Confirming:** accepted frames accumulate; a non-accepted frame before confirmation returns to Waiting without counting a retry.
 3. **Holding:** credit grows with each accepted frame's hop time. Credit reaching the required duration passes the event immediately.
-4. **Interrupted:** credit is frozen. Recovery within the grace period continues Holding. Exceeding the grace period resets credit, counts one retry, and returns to Waiting (or Confirming if the interrupting input was itself the start of a new accepted run after a release).
+4. **Interrupted:** credit is frozen. Recovery within the grace period continues Holding. Exceeding the grace period resets credit, counts one retry, and returns to Waiting; the next accepted frame starts a new attempt.
 
-Rest events use the same structure with quiet frames instead of accepted frames, no confirmation step, and no retries counted for silence that has not started.
+A note with the same pitch as the previous note (including after a tied chain) first waits for a release: 100 ms of `QUIET` frames after it becomes current. Until then accepted frames are ignored and the guidance says "Stop briefly, then whistle this note again". Notes of a different pitch need no release, so moving between notes without a break is fine.
+
+Rest events use the same structure with quiet frames instead of accepted frames, no confirmation step, and no retries counted for silence that has not started. A retry is counted when started rest credit is reset by input longer than the grace period. The guidance for rests is always "Take a breath".
 
 ### Rhythm engine
 
@@ -287,7 +294,7 @@ A single `QMainWindow` with a `QStackedWidget`:
 | Audio setup | Input and output selectors, live level meter, detected note, step-by-step calibration with status text, Measure my range, and Test input. |
 | Test input | Whistle one selectable target note (C5 to C7, default the middle of the measured range, else B5) with the detected note, pitch meter, hold indicator for a 1-second hold, guidance text, and Try again. Uses the guided-mode hold rules. |
 | Listen | Score view and Listen controls. |
-| Practice | Score view, target note and octave, detected note, pitch meter, hold indicator, beat indicator (rhythm), listening indicator, and controls. |
+| Practice | Song title as page title, "Note n of m", score view, target note and octave (or "Rest"), detected note, pitch meter, hold indicator ("Hold" or "Quiet"), guidance, beat indicator (rhythm), and controls: Pause/Resume and Restart song; Audio setup when the input is missing or lost; Repeat and Library when the song is complete. Listening starts when a song is started from the library. Returning to the page (for example from Audio setup) stays paused until Resume. Hear target note is added with sound output in milestone 5. |
 | Summary | Results from the session and Repeat, Restart, Library. |
 
 A header bar shows the page title, a Back button, and the listening indicator whenever capture is active.
@@ -295,10 +302,12 @@ A header bar shows the page title, a Back button, and the listening indicator wh
 ### Score view
 
 - Custom `QWidget` drawn with `QPainter`. The melody is laid out as one continuous staff line that scrolls horizontally; the current event is kept about one third from the left, with smooth animated scrolling.
-- Glyphs come from the Bravura font (SMuFL code points): clef, key and time signatures, note heads, stems, flags, beams for eighth-note pairs, dots, ties, rests, accidentals, and ledger lines.
+- Glyphs come from the Bravura font (SMuFL code points): clef, key and time signatures, note heads, stems, flags, dots, ties, rests, accidentals, and ledger lines. Beams for eighth-note pairs replace flags in milestone 5.
+- Accidentals follow the key signature and are remembered until the end of the measure; tied continuations do not repeat them.
+- The staff spacing scales with the widget height (7 to 16 pixels per staff space), and the content is centered vertically.
 - Note spacing is proportional to duration with a minimum width so note names fit.
 - Note names are drawn below each note with the sounding octave (for example "B5") and can be hidden in settings.
-- States are shown with color and shape: current event (highlight box and bold), completed (filled check mark), failed (cross), upcoming (normal). Colors come from the Qt palette so light and dark system themes both work.
+- States are shown with color and shape: current event (highlight band, highlight color, bold note name), completed (dimmed, with a check mark above), failed (cross, rhythm mode), upcoming (normal). Colors come from the Qt palette so light and dark system themes both work.
 - Clicking or tapping a note selects it (Listen, and Practice while paused).
 
 ### Practice widgets

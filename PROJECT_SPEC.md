@@ -99,7 +99,7 @@ The target note name and octave are shown for the highlighted note. Starting pla
 | --- | --- |
 | Mode and difficulty | Guided, Easy. |
 | Tempo | 60 beats per minute; adjustable from 30 to 120. |
-| Pitch tolerance | Easy: ±40 cents; Standard: ±25 cents. A semitone is 100 cents. |
+| Pitch tolerance | Easy: ±40 cents; Standard: ±25 cents. A semitone is 100 cents. Confirmed as fair with a real whistle (October 2026). |
 | Stable pitch confirmation | 100 milliseconds, counted toward the hold. |
 | Interruption grace period | 100 milliseconds; progress freezes during the interruption. |
 | Repeated-note release | At least 100 milliseconds without active whistle input. |

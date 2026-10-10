@@ -46,7 +46,12 @@ The library lists the bundled songs with:
 | Ode to Joy | D5–D6 | 1:04 |
 | Twinkle Twinkle Little Star | G5–E6 | 0:48 |
 
-The app remembers the last song you selected.
+Select a song to see its preparation panel on the right:
+
+- **Tempo:** 30 to 120 beats per minute. At a slower tempo every note must be held longer. The estimated length updates as you change it.
+- **Difficulty:** **Easy** accepts notes within ±40 cents of the target, **Standard** within ±25 cents (a semitone is 100 cents).
+
+Tempo and difficulty are remembered for each song, and the app remembers the last song you selected.
 
 ### Set up your microphone
 
@@ -58,7 +63,7 @@ Press **Audio setup…** in the library.
 
 If setup reports a problem, follow its suggestion (whistle closer, raise the input volume, or reduce background noise) and press **Repeat setup**. Repeat setup when you change rooms or microphones.
 
-The app never switches microphones on its own. If your microphone is unplugged, it says so and stops listening until you choose an input again. A **● Listening** indicator in the top right corner shows whenever the microphone is in use; it is only in use on the Audio setup and Test input pages.
+The app never switches microphones on its own. If your microphone is unplugged, it says so and stops listening until you choose an input again. A **● Listening** indicator in the top right corner shows whenever the microphone is in use; it is only in use on the Audio setup, Test input, and practice pages.
 
 ### Test your whistle
 
@@ -70,6 +75,22 @@ After setup, press **Test input**. Pick a target note and a difficulty, then whi
 - **No clear pitch** means the app hears sound but no clear whistle.
 
 Press **Try again** to repeat, or choose another note.
+
+### Practice a song
+
+Select a song and press **Start practice** (or double-click the song). The microphone must be set up first; if it is not, the page explains this and offers **Audio setup…**.
+
+The app currently has one mode, **Guided**: the song waits for you at every note.
+
+- The score shows the melody with note names. The current note is highlighted, and completed notes are marked with ✓. Notes are drawn an octave lower than they sound, as is usual for whistle and piccolo music; the names show the real pitch.
+- Whistle the highlighted note and hold it for its written length at the chosen tempo. At 60 bpm a quarter note is 1 second, a half note 2 seconds, and a whole note 4 seconds. The bar shows how long you have held it.
+- Start whenever you are ready: silence before a note is never counted against you.
+- **Rests** say "Take a breath": stay quiet for the rest's length.
+- **Repeated notes** (the same note twice) need a short break between them. If you keep whistling, the app asks you to stop briefly and whistle the note again.
+- **Tied notes** (joined by a curve) are one long note: hold them together without a break.
+- A short break in a note (under a tenth of a second) pauses the bar; a longer break starts that note again and counts as a retry.
+
+**Pause** stops listening and starts the current note over when you press **Resume**. **Restart song** goes back to the beginning. If the microphone is unplugged, practice pauses and never resumes by itself. At the end, the app shows your active practice time and number of retries, with **Repeat** and **Library** buttons.
 
 ## Your data
 
