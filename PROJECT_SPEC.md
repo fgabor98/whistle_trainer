@@ -146,7 +146,7 @@ Include quiet-room and representative background-noise checks on supported Linux
 
 ## Open decisions and delivery
 
-Before implementation, choose the initial songs and source arrangements, supported Linux distributions and audio configurations, and screen layout. Review the proposed rhythm retry rules and defaults. Validate comfortable whistle range, useful input levels, and minimum practical note duration.
+Initial songs, the supported Linux setup, screen layout, and technology are decided in [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md). Review the proposed rhythm retry rules and defaults. Validate comfortable whistle range, useful input levels, and minimum practical note duration.
 
 Suggested delivery order:
 
