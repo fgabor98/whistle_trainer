@@ -13,6 +13,7 @@ Confirmed requirements:
 - Users can select a PC audio input; the app detects the whistle's dominant pitch.
 - Both pitch and duration determine progress. Incorrect notes cannot be skipped automatically.
 - Both guided practice and continuous rhythm practice are available.
+- A listen mode plays the loaded song from the computer so users can hear how each note sounds, either the whole song with one click or one note at a time.
 
 Everything else below is proposed for review. Numeric defaults need validation with real whistles and supported devices.
 
@@ -23,7 +24,7 @@ Accompaniment, lyrics, harmony, automatic transcription, arbitrary score imports
 ## Setup and practice flow
 
 1. **Set up audio:** Select an input, check its activity meter, then stay quiet and whistle a steady note to establish useful input levels. Optionally try comfortable low and high notes to suggest a practice range. If input is unusable, suggest checking the device, distance, or volume.
-2. **Choose a song:** Review its length, pitch range, and saved progress. Select mode, tempo, difficulty, and transposition; optionally preview the melody. Duration estimates use the selected tempo and exclude waiting and retries.
+2. **Choose a song:** Review its length, pitch range, and saved progress. Select mode, tempo, difficulty, and transposition; optionally open Listen mode to hear the melody. Duration estimates use the selected tempo and exclude waiting and retries.
 3. **Practice:** Follow the highlighted note, pitch guidance, and hold indicator. Guided mode waits for each attempt. Rhythm mode starts with a count-in and follows the beat until a mistake requires a retry.
 4. **Finish or return later:** Stop listening, show a summary, and offer Repeat, Restart, or Library. Reopening the app offers saved progress with capture off until practice starts.
 
@@ -33,6 +34,7 @@ Accompaniment, lyrics, harmony, automatic transcription, arbitrary score imports
 | --- | --- |
 | Song library and preparation | Song title, length, range, progress, introductory exercise, mode, tempo, difficulty, transposition, preview, Start, and Audio setup. |
 | Audio setup | Input selector, activity meter, reliable detected note, setup status, Test input, and Repeat setup. Identify unavailable devices without silently switching inputs. |
+| Listen | Score with the playing note highlighted, Play song, Stop, Previous note, Next note, tempo, transposition, and Practice. Capture is off. |
 | Practice | Score with current and upcoming notes, target name and octave, reliable detected note, pitch direction, hold progress, selected input, and listening status. Rhythm mode adds visual beats and a count-in. |
 | Summary | Mode, completed song or section, active practice time, notes needing the most retries, and replay options. |
 
@@ -80,7 +82,16 @@ A missing or wrongly timed onset, insufficient hold, excessive interruption, or 
 
 Hear target note plays a short reference while assessment is suspended, followed by a settling period. This prevents the app's own output from completing a note. Return to the same target with unfinished hold progress reset. In rhythm mode, wait for Retry and a new count-in.
 
-Full melody preview is available before practice or while paused.
+Full melody preview is available before practice or while paused through Listen mode.
+
+### Listen mode
+
+Listen mode plays the loaded song from the computer so users can learn how it should sound before whistling it. It never captures or assesses audio, and records no practice progress or retries. Playback uses the selected tempo and transposition and a clear, whistle-like tone at a comfortable fixed volume.
+
+- **Play song:** One click plays the whole melody from the selected note to the end, observing written durations, ties, and rests. The score highlights and scrolls to each note as it sounds. Stop halts playback and keeps the highlight on the last played note; playing again resumes from there, or from the start after the song has finished.
+- **Note by note:** Next note and Previous note move the highlight and play that single note for its written duration at the selected tempo; tied notes play as one sound. Selecting a note on the score plays it and makes it the current position. Rests are highlighted silently with “Rest” and its duration shown.
+
+The target note name and octave are shown for the highlighted note. Starting playback in either way stops any playback already in progress. Practice switches to the chosen practice mode at the highlighted note, with capture off until the user starts.
 
 ## Proposed defaults
 
@@ -128,6 +139,7 @@ Verify these behaviors with controlled audio and an actual microphone and whistl
 | Rhythm failure and retry | A one-second note started 250 milliseconds late, a missed onset, or only 700 milliseconds of accepted pitch fails. Stop at that event; Retry starts a new count-in without losing earlier successes. |
 | Recovery and persistence | Pause stops capture and resets only the unfinished event. Input loss gives a useful message; reconnection never resumes automatically. Relaunch restores settings and position with capture off. Rhythm resumption uses a count-in. |
 | Playback and transposition | Reference playback cannot pass a note through speakers. Transposition changes score, target, and preview together. |
+| Listen mode | Play song plays every note and rest in order at the selected tempo and transposition with the score highlight in sync. Next and Previous note play exactly one note each. Capture stays off and no progress changes. |
 | Completion | Finishing stops capture and offers Repeat. Section completion never marks unplayed parts of a song complete. |
 
 Include quiet-room and representative background-noise checks on supported Linux setups. Record tested microphones, input settings, pitch ranges, and limitations.
@@ -142,5 +154,5 @@ Suggested delivery order:
 2. Prototype one target note with live guidance; validate range, responsiveness, and pitch tolerance.
 3. Add guided durations, interruptions, repeated notes, ties, and rests.
 4. Add rhythm mode, count-in, and retry behavior.
-5. Complete score display, library, transposition, preview, persistence, and summaries.
+5. Complete score display, library, transposition, Listen mode, persistence, and summaries.
 6. Package for Linux and verify installation, first launch, recovery, and song practice.
