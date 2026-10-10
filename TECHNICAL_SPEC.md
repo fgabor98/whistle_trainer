@@ -30,6 +30,7 @@ whistle_trainer/
   music/
     model.py             Song, Event, Pitch, TimeSignature, KeySignature
     musicxml.py          MusicXML subset parser and validation
+    library.py           Loading the bundled songs
     transpose.py         Transposition and enharmonic spelling
     timing.py            Beats to seconds, event schedule
   audio/
@@ -48,6 +49,7 @@ whistle_trainer/
     rhythm.py            Continuous rhythm mode engine
     session.py           Drives an engine, owns position, retries, pause/resume
   storage/
+    jsonfile.py          Atomic JSON writes and unreadable-file recovery
     settings.py          Settings persistence
     progress.py          Per-song, per-mode progress persistence
   ui/
@@ -66,6 +68,8 @@ scripts/
   install-desktop.sh     Installs a .desktop launcher for the current user
 run.sh                   Starts the app from the project's .venv
 requirements.txt         Pinned dependency versions
+requirements-dev.txt     Adds test tools
+pyproject.toml           Project metadata and pytest settings
 ```
 
 ## Architecture
@@ -172,7 +176,7 @@ Supported:
 
 Sounding pitch = written pitch + `chromatic` + 12 × `octave-change`. Bundled songs are written an octave below sounding pitch with `octave-change` 1, matching the score display decision. Files without a `transpose` element are interpreted the same way, so that songs exported from MuseScore with a plain treble instrument also display correctly.
 
-Anything else that affects the melody (chords, multiple voices or parts, grace notes, tuplets, repeats, pickup measures with partial durations other than a valid anacrusis) is rejected with a clear message naming the file and measure. Dynamics, lyrics, slurs, and layout elements are ignored. The parser validates that each measure's durations match the time signature, except for a first-measure anacrusis.
+Anything else that affects the melody (chords, multiple voices, staves or parts, grace notes, tuplets, microtones, repeats and jumps, key or time signature changes after the first measure) is rejected with a clear message naming the file and measure. Dynamics, lyrics, slurs, and layout elements are ignored. The parser validates that each measure's durations match the time signature. Only the first measure (a pickup) and the last measure may be shorter; no measure may be longer or empty. A whole-measure rest may omit its note type; for other notes without a type, the type is derived from the duration.
 
 ### Bundled arrangements
 
@@ -337,7 +341,7 @@ Kept in `tests/MANUAL_CHECKS.md`: setup with a built-in and a USB microphone, qu
 ## Installation and running
 
 - System packages on Ubuntu 24.04: `python3-venv`, `libportaudio2`, `libxcb-cursor0` (needed by Qt 6 on X11).
-- `scripts/setup.sh` checks for these, creates `.venv`, and installs pinned versions from `requirements.txt` (PySide6, sounddevice, numpy, platformdirs; pytest and pytest-qt as development dependencies).
+- `scripts/setup.sh` checks for these, creates `.venv`, and installs pinned versions from `requirements.txt` (PySide6-Essentials, sounddevice, numpy, platformdirs). `scripts/setup.sh --dev` installs `requirements-dev.txt`, which adds pytest and pytest-qt.
 - `./run.sh` starts the app; `scripts/install-desktop.sh` adds a launcher to the application menu.
 - The app works offline; there is no network access at runtime.
 
