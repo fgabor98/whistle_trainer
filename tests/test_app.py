@@ -928,3 +928,93 @@ def test_remove_added_song(qtbot, tmp_path, settings, devices, audio, playback):
     assert not path.exists()
     assert "user-my-tune" not in progress.songs and window.library.get("user-my-tune") is None
     assert library.song_list.topLevelItemCount() == 4 and library.song is not None
+
+
+# Add song
+
+def made_up_piano_score() -> str:
+    """Two staves: a simple right-hand tune over left-hand chords (invented for the tests)."""
+    def note(step, octave, duration, staff, chord=False, note_type="quarter"):
+        return (f"<note>{'<chord/>' if chord else ''}<pitch><step>{step}</step><octave>{octave}</octave></pitch>"
+                f"<duration>{duration}</duration><voice>{staff}</voice><type>{note_type}</type><staff>{staff}</staff></note>")
+    left = ("<backup><duration>4</duration></backup>" + note("C", 3, 4, 2, note_type="whole")
+            + note("G", 3, 4, 2, chord=True, note_type="whole"))
+    measure_1 = note("E", 4, 1, 1) + note("G", 4, 1, 1) + note("C", 4, 1, 1, chord=True) + note("A", 4, 2, 1, note_type="half") + left
+    measure_2 = note("G", 4, 4, 1, note_type="whole") + left
+    return ('<?xml version="1.0"?><score-partwise version="4.0"><work><work-title>Invented Tune</work-title></work>'
+            '<part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list><part id="P1">'
+            '<measure number="1"><attributes><divisions>1</divisions><key><fifths>0</fifths></key>'
+            '<time><beats>4</beats><beat-type>4</beat-type></time><staves>2</staves></attributes>'
+            + measure_1 + '</measure><measure number="2">' + measure_2 + '</measure></part></score-partwise>')
+
+
+@pytest.fixture
+def window_with_songs_folder(qtbot, tmp_path, settings, devices, audio, playback):
+    songs = tmp_path / "songs"
+    window = MainWindow(load_songs(user_directory=songs), settings, ProgressStore(tmp_path / "progress.json"),
+                        devices, audio, playback)
+    qtbot.addWidget(window)
+    return window, songs
+
+
+def test_add_song_imports_previews_and_adds(window_with_songs_folder, tmp_path, playback):
+    window, songs = window_with_songs_folder
+    source = tmp_path / "invented.musicxml"
+    source.write_text(made_up_piano_score(), encoding="utf-8")
+    dialogs = []
+
+    def run(dialog):
+        dialogs.append(dialog)
+        assert dialog.title_edit.text() == "Invented Tune"
+        assert dialog.line_combo.count() == 2 and dialog.line_combo.currentIndex() == 0
+        assert "1 note of chords and accompaniment was left out." in dialog.report_label.text()
+        assert "moved up an octave" in dialog.report_label.text()
+        dialog.preview_button.click()
+        assert dialog.previewing and len(playback.scheduled) == 4
+        dialog.title_edit.setText("My Invented Tune")
+        dialog.accept()
+        assert not dialog.previewing
+        return True
+
+    window.run_dialog = run
+    window.add_song(source)
+    assert (songs / "my-invented-tune.musicxml").exists()
+    song = window.library.get("user-my-invented-tune")
+    assert song is not None and song.user_added and song.title == "My Invented Tune"
+    assert [e.pitch.name for e in song.notes] == ["E5", "G5", "A5", "G5"]
+    assert window.library_page.song.id == "user-my-invented-tune"
+    assert window.library_page.remove_song_button.isVisibleTo(window.library_page)
+
+
+def test_add_song_cancelled_adds_nothing(window_with_songs_folder, tmp_path):
+    window, songs = window_with_songs_folder
+    source = tmp_path / "invented.musicxml"
+    source.write_text(made_up_piano_score(), encoding="utf-8")
+    window.run_dialog = lambda dialog: False
+    window.add_song(source)
+    assert not songs.exists() or not any(songs.iterdir())
+
+
+def test_add_song_other_line_changes_the_report(window_with_songs_folder, tmp_path):
+    window, _ = window_with_songs_folder
+    source = tmp_path / "invented.musicxml"
+    source.write_text(made_up_piano_score(), encoding="utf-8")
+
+    def run(dialog):
+        dialog.line_combo.setCurrentIndex(1)  # the left hand
+        assert dialog.result.report.line == "Piano, lower staff"
+        assert dialog.result_label.text().startswith("Result: 2 notes")
+        return False
+
+    window.run_dialog = run
+    window.add_song(source)
+
+
+def test_add_song_reports_unusable_files(window_with_songs_folder, tmp_path, monkeypatch):
+    window, _ = window_with_songs_folder
+    source = tmp_path / "broken.musicxml"
+    source.write_text("<oops", encoding="utf-8")
+    warnings = []
+    monkeypatch.setattr("whistle_trainer.app.QMessageBox.warning", lambda *args: warnings.append(args[2]))
+    window.add_song(source)
+    assert warnings and warnings[0].startswith("This file cannot be added:")

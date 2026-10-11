@@ -103,6 +103,7 @@ Users can add a song they have a score of, for example a piano arrangement expor
 - **Kept:** pitches, rhythms including triplets, ties, rests, key and time signature changes, pickup measures, and the tempo marking.
 - **Range:** the melody is moved by whole octaves to sit as close as possible to the comfortable whistle range (D5 to E6); the transposition setting and the measured range can then fine-tune it.
 - **Rounding:** rhythms the app cannot show, such as quintuplets, are rounded to the nearest sixteenth-note triplet and reported.
+- **Measures:** a measure with more or fewer beats than its time signature, a common recognition error, is cut or filled with rest to fit, and reported.
 
 The dialog shows the title (editable), the melody line used with its note count and range, and a short report of what was simplified. **Play preview** plays the beginning of the melody, and **Add** saves it. Added songs are stored only on the user's computer, appear in the library like the bundled songs, and can be removed again (with confirmation); removing a song also removes its progress. A file the app cannot use at all, for example one without any notes, is reported with the reason.
 

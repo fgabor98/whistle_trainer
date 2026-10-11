@@ -86,6 +86,16 @@ Checks that need a real microphone and a real whistle. Run them on the reference
 3. Restart the app: Piano is still selected. **Hear note** during practice plays the piano too, and the app does not count it as your whistle when it comes through speakers.
 4. Switch back to **Whistle**: Listen and Hear note use the whistle tone again.
 
+## Adding songs
+
+1. **Add song…** with a piano score exported from MuseScore: the dialog proposes the right-hand melody, lists what was simplified, and **Play preview** plays the tune.
+2. With a piano-vocal score, the vocal line is proposed instead.
+3. Choose another line under **Melody from**: the result and report change; the preview plays that line.
+4. **Add**: the song appears in the library, selected, with **Remove song…**. Listen and practice work, including triplets and any key or time changes in the song.
+5. A score with repeats, first and second endings, or D.C./D.S. plays straight through in the order the score asks for.
+6. A score converted from a PDF: measures with wrong beat counts are reported, and the song still loads.
+7. **Remove song…** asks first, then deletes the song and its progress.
+
 ## Results
 
 | Date | Microphone | Room | Background / whistle / threshold (dB) | Range | Notes |

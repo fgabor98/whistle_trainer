@@ -113,6 +113,17 @@ When you reach the end of the song or section, the summary shows the mode, what 
 
 Your progress is saved as you practice, for each song and mode. A song counts as completed in a mode once you have completed every note of it in that mode.
 
+### 6. Add your own songs
+
+You can add any song you have a score of, as long as it is in MusicXML format (`.musicxml`, `.xml`, or compressed `.mxl`). MuseScore exports this with **File → Export → MusicXML**. A PDF first needs converting with a music recognition tool, such as MuseScore's **Import PDF**, Audiveris, or an online converter; check the result in MuseScore, because recognition makes mistakes.
+
+1. Press **Add song…** below the song list and choose the file.
+2. The app picks the melody: a vocal or melody part if there is one, otherwise the top notes of the right hand. It leaves out chords and accompaniment, removes grace notes, writes out repeats and jumps such as D.C. and D.S., moves the tune into the whistle range by whole octaves, and fits measures with too many or too few beats. The dialog lists what it changed.
+3. Press **Play preview** to hear the first 20 seconds. If it is not the tune, choose another line under **Melody from** and listen again.
+4. Adjust the **Title** if you like, and press **Add**.
+
+Added songs are kept only on your computer, in `~/.local/share/whistle-trainer/songs/`. They work like the bundled songs; **Remove song…** in the preparation panel deletes one again, together with its progress. Only add songs you have the right to use.
+
 ### Keyboard shortcuts
 
 | Key | Action |

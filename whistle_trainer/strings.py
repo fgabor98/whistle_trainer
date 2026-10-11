@@ -216,3 +216,36 @@ LIBRARY_RANGE = "Range: {low}–{high} (as whistled)"
 LISTEN_SOUND = "Sound:"
 SOUND_NAMES = {"whistle": "Whistle", "piano": "Piano"}
 PIANO_CREDIT = "Piano: Salamander Grand Piano by Alexander Holm, CC BY 3.0"
+
+LIBRARY_ADD_SONG = "Add song…"
+ADD_SONG_FILE_DIALOG = "Choose a MusicXML score"
+ADD_SONG_FILE_FILTER = "MusicXML scores (*.musicxml *.xml *.mxl)"
+ADD_SONG_TITLE = "Add song"
+ADD_SONG_FILE = "File:"
+ADD_SONG_NAME = "Title:"
+ADD_SONG_LINE = "Melody from:"
+ADD_SONG_CANDIDATE = "{label} ({count} notes, {low}–{high})"
+ADD_SONG_RESULT = "Result: {count} notes, {low}–{high}, {measures} measures."
+ADD_SONG_SIMPLIFIED = "What was simplified:"
+# Report lines: (one, several), filled with the count.
+ADD_SONG_LEFT_OUT = ("1 note of chords and accompaniment was left out.",
+                     "{count} notes of chords and accompaniment were left out.")
+ADD_SONG_GRACE = ("1 grace note was removed.", "{count} grace notes were removed.")
+ADD_SONG_WRITTEN_OUT = ("Repeats and jumps were written out (1 measure added).",
+                        "Repeats and jumps were written out ({count} measures added).")
+ADD_SONG_ROUNDED = ("1 note was rounded to the nearest sixteenth-note triplet.",
+                    "{count} notes were rounded to the nearest sixteenth-note triplet.")
+ADD_SONG_TOO_LONG = ("1 measure had too many beats; notes past the barline were cut.",
+                     "{count} measures had too many beats; notes past the barline were cut.")
+ADD_SONG_TOO_SHORT = ("1 measure had too few beats and was filled with a rest.",
+                      "{count} measures had too few beats and were filled with rests.")
+ADD_SONG_MOVED_UP = ("The melody was moved up an octave into the whistle range.",
+                     "The melody was moved up {count} octaves into the whistle range.")
+ADD_SONG_MOVED_DOWN = ("The melody was moved down an octave into the whistle range.",
+                       "The melody was moved down {count} octaves into the whistle range.")
+ADD_SONG_NOTHING = "Nothing needed simplifying."
+ADD_SONG_HINT = "Not the tune you expected? Choose another line under “Melody from” and play the preview."
+ADD_SONG_PREVIEW = "▶ Play preview"
+ADD_SONG_STOP = "■ Stop"
+ADD_SONG_ADD = "Add"
+ADD_SONG_FAILED = "This file cannot be added: {reason}"

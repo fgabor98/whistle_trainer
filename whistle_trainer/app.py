@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -11,6 +12,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QDialog,
+    QFileDialog,
     QMessageBox,
     QPushButton,
     QStackedWidget,
@@ -22,9 +25,11 @@ from whistle_trainer import strings
 from whistle_trainer.audio.capture import AudioInput
 from whistle_trainer.audio.devices import AudioDevices
 from whistle_trainer.audio.playback import Playback
-from whistle_trainer.music.library import SongLibrary, default_user_songs_dir, load_songs
+from whistle_trainer.music.importer import ScoreImportError, read_score
+from whistle_trainer.music.library import USER_SONG_PREFIX, SongLibrary, default_user_songs_dir, load_songs
 from whistle_trainer.storage.progress import ProgressStore
 from whistle_trainer.storage.settings import SettingsStore
+from whistle_trainer.ui.import_dialog import ImportDialog
 from whistle_trainer.ui.pages.library import LibraryPage
 from whistle_trainer.ui.pages.listen import ListenPage
 from whistle_trainer.ui.pages.practice import PracticePage
@@ -68,6 +73,9 @@ class MainWindow(QMainWindow):
         self.library_page.audio_setup_requested.connect(lambda: self.show_page(self.setup_page))
         self.library_page.reset_all_requested.connect(self.reset_all)
         self.library_page.remove_requested.connect(self.remove_song)
+        self.library_page.add_requested.connect(self.add_song)
+        self.devices = devices
+        self.playback = playback
         self.setup_page = SetupPage(devices, audio, settings)
         self.setup_page.test_input_requested.connect(lambda: self.show_page(self.test_input_page))
         self.test_input_page = TestInputPage(devices, audio, settings)
@@ -151,6 +159,36 @@ class MainWindow(QMainWindow):
         """Practice the same song or section again."""
         page = self.practice_page
         self.start_practice(page.original.id, page.range_start, page.range_end)
+
+    def choose_score_file(self) -> Path | None:
+        name, _ = QFileDialog.getOpenFileName(self, strings.ADD_SONG_FILE_DIALOG, str(Path.home()),
+                                              strings.ADD_SONG_FILE_FILTER)
+        return Path(name) if name else None
+
+    def run_dialog(self, dialog: ImportDialog) -> bool:
+        return dialog.exec() == QDialog.DialogCode.Accepted
+
+    def add_song(self, path: Path | None = None) -> None:
+        """Import a MusicXML score as a new song in the personal songs folder."""
+        path = path or self.choose_score_file()
+        if path is None:
+            return
+        try:
+            score = read_score(path)
+        except ScoreImportError as error:
+            QMessageBox.warning(self, strings.APP_NAME, strings.ADD_SONG_FAILED.format(reason=error))
+            return
+        directory = self.library.user_directory or default_user_songs_dir()
+        dialog = ImportDialog(score, self.devices, self.playback, self.settings, directory, self)
+        if not self.run_dialog(dialog):
+            return
+        self.reload_library(select=USER_SONG_PREFIX + dialog.saved_path.stem)
+
+    def reload_library(self, select: str | None = None) -> None:
+        fresh = load_songs(user_directory=self.library.user_directory or default_user_songs_dir())
+        self.library.songs, self.library.errors, self.library.paths = fresh.songs, fresh.errors, fresh.paths
+        self.library.user_directory = fresh.user_directory
+        self.library_page.reload_songs(select)
 
     def remove_song(self, song_id: str) -> None:
         """Delete an added song with its progress and preferences."""

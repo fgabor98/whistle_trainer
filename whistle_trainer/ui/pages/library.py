@@ -42,6 +42,7 @@ class LibraryPage(QWidget):
     audio_setup_requested = Signal()
     reset_all_requested = Signal()
     remove_requested = Signal(str)  # song id of an added song
+    add_requested = Signal()
 
     def __init__(self, library: SongLibrary, settings: SettingsStore, progress: ProgressStore,
                  parent: QWidget | None = None):
@@ -74,6 +75,9 @@ class LibraryPage(QWidget):
         below = QHBoxLayout()
         below.addWidget(self.note_names_check)
         below.addStretch()
+        self.add_song_button = QPushButton(strings.LIBRARY_ADD_SONG)
+        self.add_song_button.clicked.connect(self.add_requested)
+        below.addWidget(self.add_song_button)
         below.addWidget(self.reset_all_button)
         songs = QVBoxLayout()
         songs.addWidget(self.song_list)
