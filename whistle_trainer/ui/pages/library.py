@@ -41,6 +41,7 @@ class LibraryPage(QWidget):
     listen_requested = Signal(str)  # song id
     audio_setup_requested = Signal()
     reset_all_requested = Signal()
+    remove_requested = Signal(str)  # song id of an added song
 
     def __init__(self, library: SongLibrary, settings: SettingsStore, progress: ProgressStore,
                  parent: QWidget | None = None):
@@ -60,11 +61,7 @@ class LibraryPage(QWidget):
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for column in (1, 2, 3):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
-        for song in library.songs:
-            item = QTreeWidgetItem([song.title, format_length(song_seconds(song, song.tempo)),
-                                    f"{song.lowest.name}–{song.highest.name}", ""])
-            item.setData(0, Qt.ItemDataRole.UserRole, song.id)
-            self.song_list.addTopLevelItem(item)
+        self._fill_list()
         self.song_list.itemActivated.connect(lambda _item, _column: self._start(0))
 
         hint = QLabel(strings.LIBRARY_LENGTH_HINT)
@@ -148,6 +145,8 @@ class LibraryPage(QWidget):
         self.continue_button.clicked.connect(lambda: self._start(self._continue_index()))
         self.listen_button = QPushButton(strings.LIBRARY_LISTEN)
         self.listen_button.clicked.connect(lambda: self.song and self.listen_requested.emit(self.song.id))
+        self.remove_song_button = QPushButton(strings.LIBRARY_REMOVE_SONG)
+        self.remove_song_button.clicked.connect(self._remove_song)
         self.reset_song_button = QPushButton(strings.LIBRARY_RESET_SONG)
         self.reset_song_button.clicked.connect(self._reset_song)
         self.audio_setup_button = QPushButton(strings.LIBRARY_AUDIO_SETUP)
@@ -172,6 +171,7 @@ class LibraryPage(QWidget):
         panel_layout.addWidget(self.listen_button)
         panel_layout.addStretch()
         panel_layout.addWidget(self.reset_song_button)
+        panel_layout.addWidget(self.remove_song_button)
         panel_layout.addWidget(self.audio_setup_button)
         panel.setMinimumWidth(320)
         return panel
@@ -244,6 +244,7 @@ class LibraryPage(QWidget):
         widgets = (self.mode_combo, self.tempo_spin, self.difficulty_combo, self.transposition_spin)
         for widget in (*widgets, self.start_button, self.listen_button, self.reset_song_button):
             widget.setEnabled(self.song is not None)
+        self.remove_song_button.setVisible(self.song is not None and self.song.user_added)
         if self.song is None:
             for label in (self.song_title, self.estimate_label, self.range_label, self.suggestion_label):
                 label.setText("")
@@ -322,6 +323,32 @@ class LibraryPage(QWidget):
                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
                                       QMessageBox.StandardButton.Cancel)
         return answer == QMessageBox.StandardButton.Yes
+
+    def _fill_list(self) -> None:
+        self.song_list.clear()
+        for song in self.library.songs:
+            item = QTreeWidgetItem([song.title, format_length(song_seconds(song, song.tempo)),
+                                    f"{song.lowest.name}–{song.highest.name}", ""])
+            item.setData(0, Qt.ItemDataRole.UserRole, song.id)
+            self.song_list.addTopLevelItem(item)
+
+    def reload_songs(self, select: str | None = None) -> None:
+        """Rebuild the list after songs were added or removed, selecting `select` or the first song."""
+        self.song_list.blockSignals(True)
+        self._fill_list()
+        self.song_list.blockSignals(False)
+        self.refresh()
+        wanted = select if select and self.library.get(select) else None
+        if wanted:
+            self.select_song(wanted)
+        elif self.song_list.topLevelItemCount():
+            self.song_list.setCurrentItem(self.song_list.topLevelItem(0))
+        self._on_current_changed(self.song_list.currentItem(), None)
+
+    def _remove_song(self) -> None:
+        if self.song is not None and self.song.user_added and \
+                self.confirm(strings.LIBRARY_REMOVE_SONG_CONFIRM.format(title=self.song.title)):
+            self.remove_requested.emit(self.song.id)
 
     def _reset_song(self) -> None:
         if self.song is not None and self.confirm(strings.LIBRARY_RESET_SONG_CONFIRM.format(title=self.song.title)):

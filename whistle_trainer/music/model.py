@@ -143,6 +143,7 @@ class Song:
     tempo: int  # default tempo in quarter notes per minute
     events: tuple[Event, ...]
     measures: tuple[Measure, ...]
+    user_added: bool = False  # added with Add song, stored in the personal songs folder
 
     @property
     def length(self) -> Fraction:

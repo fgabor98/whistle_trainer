@@ -22,7 +22,7 @@ from whistle_trainer import strings
 from whistle_trainer.audio.capture import AudioInput
 from whistle_trainer.audio.devices import AudioDevices
 from whistle_trainer.audio.playback import Playback
-from whistle_trainer.music.library import SongLibrary, load_songs
+from whistle_trainer.music.library import SongLibrary, default_user_songs_dir, load_songs
 from whistle_trainer.storage.progress import ProgressStore
 from whistle_trainer.storage.settings import SettingsStore
 from whistle_trainer.ui.pages.library import LibraryPage
@@ -67,6 +67,7 @@ class MainWindow(QMainWindow):
         self.library_page.listen_requested.connect(self.start_listening)
         self.library_page.audio_setup_requested.connect(lambda: self.show_page(self.setup_page))
         self.library_page.reset_all_requested.connect(self.reset_all)
+        self.library_page.remove_requested.connect(self.remove_song)
         self.setup_page = SetupPage(devices, audio, settings)
         self.setup_page.test_input_requested.connect(lambda: self.show_page(self.test_input_page))
         self.test_input_page = TestInputPage(devices, audio, settings)
@@ -151,6 +152,15 @@ class MainWindow(QMainWindow):
         page = self.practice_page
         self.start_practice(page.original.id, page.range_start, page.range_end)
 
+    def remove_song(self, song_id: str) -> None:
+        """Delete an added song with its progress and preferences."""
+        self.library.remove(song_id)
+        self.progress.reset_song(song_id)
+        self.progress.save()
+        self.settings.settings.song_preferences.pop(song_id, None)
+        self.settings.save()
+        self.library_page.reload_songs()
+
     def reset_all(self) -> None:
         self.settings.clear()
         self.progress.clear()
@@ -184,7 +194,7 @@ def main(argv: list[str] | None = None) -> int:
     progress = ProgressStore()
     messages = [m for m in (settings.load(), progress.load()) if m]
 
-    library = load_songs()
+    library = load_songs(user_directory=default_user_songs_dir())
     changed = progress.reset_changed_songs((s.id, len(s.events)) for s in library.songs)
     if changed:
         titles = ", ".join(library.get(song_id).title for song_id in changed)
