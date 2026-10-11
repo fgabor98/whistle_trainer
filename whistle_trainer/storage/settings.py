@@ -45,6 +45,8 @@ class Calibration:
 class SongPreferences:
     mode: Mode = config.DEFAULT_MODE
     difficulty: Difficulty = config.DEFAULT_DIFFICULTY
+    # The tempo of the current session with this song. It is not saved: each time the
+    # song is selected it starts again at the song's own tempo.
     tempo: int = config.DEFAULT_TEMPO
     transposition: int = 0
 
@@ -55,12 +57,10 @@ class SongPreferences:
             difficulty = Difficulty(require(data, "difficulty", str, config.DEFAULT_DIFFICULTY))
         except ValueError as error:
             raise UnreadableFile(str(error)) from error
-        tempo = require(data, "tempo", int, config.DEFAULT_TEMPO)
         transposition = require(data, "transposition", int, 0)
         return cls(
             mode=mode,
             difficulty=difficulty,
-            tempo=min(max(tempo, config.MIN_TEMPO), config.MAX_TEMPO),
             transposition=min(max(transposition, config.MIN_TRANSPOSITION), config.MAX_TRANSPOSITION),
         )
 
@@ -84,7 +84,10 @@ class Settings:
         return self.song_preferences[song_id]
 
     def to_dict(self) -> dict:
-        return {"schema_version": SCHEMA_VERSION, **asdict(self)}
+        data = {"schema_version": SCHEMA_VERSION, **asdict(self)}
+        for preferences in data["song_preferences"].values():
+            del preferences["tempo"]  # session-only
+        return data
 
     @classmethod
     def from_dict(cls, data: dict) -> Settings:

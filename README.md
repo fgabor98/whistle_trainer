@@ -46,19 +46,19 @@ The app never switches microphones on its own. If your microphone is unplugged, 
 
 ### 2. Choose a song
 
-The library lists the songs with their length at the default tempo, their range, and your progress in the selected mode ("12 of 42 notes", "✓ Completed").
+The library lists the songs with their length at their own tempo, their range, and your progress in the selected mode ("12 of 42 notes", "✓ Completed").
 
-| Song | Range | Length |
-| --- | --- | --- |
-| Introductory exercise | G5–B5 | 0:28 |
-| Frère Jacques | D5–E6 | 0:32 |
-| Ode to Joy | D5–D6 | 1:04 |
-| Twinkle Twinkle Little Star | G5–E6 | 0:48 |
+| Song | Range | Tempo | Length |
+| --- | --- | --- | --- |
+| Introductory exercise | G5–B5 | 60 bpm | 0:28 |
+| Frère Jacques | D5–E6 | 100 bpm | 0:19 |
+| Ode to Joy | D5–D6 | 100 bpm | 0:38 |
+| Twinkle Twinkle Little Star | G5–E6 | 90 bpm | 0:32 |
 
-Select a song to prepare it in the panel on the right. Everything is remembered for each song:
+Select a song to prepare it in the panel on the right. Mode, difficulty, and transposition are remembered for each song:
 
 - **Mode:** **Guided** waits for you at every note; **Rhythm** keeps the beat after a count-in.
-- **Tempo:** 30 to 120 beats per minute. At a slower tempo every note must be held longer.
+- **Tempo:** 30 to 120 beats per minute. Each song starts at its own tempo every time you select it; a slower tempo makes every note last longer. A changed tempo is used for Listen and Practice until you select another song or restart the app.
 - **Difficulty:** **Easy** accepts notes within ±40 cents of the target, **Standard** within ±25 cents (a semitone is 100 cents).
 - **Transposition:** moves the whole song up or down by semitones. If you measured your range, the panel suggests a transposition; press **Use** to apply it.
 

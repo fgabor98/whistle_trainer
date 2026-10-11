@@ -245,21 +245,36 @@ def start_intro(window, settings, tempo=120):
     return window.practice_page
 
 
-def test_preparation_panel_saves_preferences(window, settings):
+def test_preparation_panel_saves_preferences_but_not_tempo(window, settings):
     page = window.library_page
     page.select_song("ode-to-joy")
     assert page.song_title.text() == "Ode to Joy"
-    assert page.tempo_spin.value() == 60
-    assert page.estimate_label.text() == strings.LIBRARY_ESTIMATE.format(length="1:04")
-    page.tempo_spin.setValue(120)
+    assert page.tempo_spin.value() == 100  # the song's own tempo
+    assert page.estimate_label.text() == strings.LIBRARY_ESTIMATE.format(length="0:38")
+    page.tempo_spin.setValue(50)
     page.difficulty_combo.setCurrentIndex(page.difficulty_combo.findData(Difficulty.STANDARD))
-    assert page.estimate_label.text() == strings.LIBRARY_ESTIMATE.format(length="0:32")
+    assert page.estimate_label.text() == strings.LIBRARY_ESTIMATE.format(length="1:17")
     prefs = settings.settings.song_preferences["ode-to-joy"]
-    assert (prefs.tempo, prefs.difficulty) == (120, Difficulty.STANDARD)
-    page.select_song("frere-jacques")
+    assert (prefs.tempo, prefs.difficulty) == (50, Difficulty.STANDARD)
+    page.select_song("introductory-exercise")
     assert page.tempo_spin.value() == 60
     page.select_song("ode-to-joy")
-    assert page.tempo_spin.value() == 120
+    assert page.tempo_spin.value() == 100  # back to the song's tempo
+    assert page.difficulty_combo.currentData() == Difficulty.STANDARD  # still remembered
+
+
+def test_changed_tempo_is_used_while_the_song_stays_selected(window, audio, settings):
+    calibrate(settings, MIC)
+    page = window.library_page
+    page.select_song("frere-jacques")
+    page.tempo_spin.setValue(70)
+    page.listen_button.click()
+    assert window.listen_page.tempo_spin.value() == 70
+    window.listen_page.tempo_spin.setValue(80)
+    window.listen_page.practice_button.click()
+    assert window.practice_page.preferences.tempo == 80
+    window.back_button.click()
+    assert page.tempo_spin.value() == 80
 
 
 def test_start_without_setup_explains(window, audio):

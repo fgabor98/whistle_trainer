@@ -173,7 +173,8 @@ def test_bundled_songs_load_with_expected_ranges():
     for song in library.songs:
         assert song.key == KeySignature(1)
         assert song.time.beats == 4 and song.time.beat_type == 4
-        assert song.tempo == 60
+        assert song.tempo == {"introductory-exercise": 60, "twinkle-twinkle-little-star": 90,
+                              "ode-to-joy": 100, "frere-jacques": 100}[song.id]
         # The shortest note is an eighth.
         assert min(e.duration for e in song.events) >= Fraction(1, 2)
 

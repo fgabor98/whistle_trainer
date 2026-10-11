@@ -41,8 +41,11 @@ def test_settings_round_trip(settings_path):
 
     loaded = SettingsStore(settings_path)
     assert loaded.load() is None
+    assert "tempo" not in json.loads(settings_path.read_text())["song_preferences"]["ode-to-joy"]
+    prefs.tempo = loaded.settings.song_preferences["ode-to-joy"].tempo  # tempo is session-only
     assert loaded.settings == store.settings
-    assert loaded.settings.song_preferences["ode-to-joy"] == SongPreferences(Mode.RHYTHM, Difficulty.STANDARD, 72, -2)
+    assert loaded.settings.song_preferences["ode-to-joy"] == \
+        SongPreferences(Mode.RHYTHM, Difficulty.STANDARD, transposition=-2)
 
 
 @pytest.mark.parametrize("content", [
@@ -52,7 +55,7 @@ def test_settings_round_trip(settings_path):
     json.dumps({"schema_version": 1, "show_note_names": "yes"}),
     json.dumps({"schema_version": 1, "song_preferences": {"x": {"mode": "freestyle"}}}),
     json.dumps({"schema_version": 1, "calibrations": {"mic": {"noise_floor_db": -60}}}),
-    json.dumps({"schema_version": 1, "song_preferences": {"x": {"tempo": True}}}),
+    json.dumps({"schema_version": 1, "song_preferences": {"x": {"transposition": True}}}),
 ])
 def test_unreadable_settings_are_kept_aside_and_reset(settings_path, content):
     settings_path.parent.mkdir(parents=True)
@@ -65,15 +68,15 @@ def test_unreadable_settings_are_kept_aside_and_reset(settings_path, content):
     assert store.settings.input_device is None
 
 
-def test_out_of_range_preferences_are_clamped(settings_path):
+def test_out_of_range_preferences_are_clamped_and_old_tempo_ignored(settings_path):
     settings_path.parent.mkdir(parents=True)
     settings_path.write_text(json.dumps({
         "schema_version": 1,
-        "song_preferences": {"x": {"tempo": 500, "transposition": -40}},
+        "song_preferences": {"x": {"tempo": 45, "transposition": -40}},  # tempo saved by older versions
     }), encoding="utf-8")
     store = SettingsStore(settings_path)
     assert store.load() is None
-    assert store.settings.song_preferences["x"].tempo == 120
+    assert store.settings.song_preferences["x"].tempo == 60
     assert store.settings.song_preferences["x"].transposition == -12
 
 

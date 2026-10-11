@@ -39,7 +39,7 @@ Checks that need a real microphone and a real whistle. Run them on the reference
 
 ## Milestone 3: guided practice
 
-1. In the library, select a song, change its tempo and difficulty, and restart the app: the choices are remembered per song. The estimated length changes with the tempo.
+1. In the library, select a song, change its tempo and difficulty, and restart the app: the difficulty is remembered per song, and the tempo is back at the song's own tempo (60 for the exercise, 90 for Twinkle, 100 for Ode to Joy and Frère Jacques). The estimated length changes with the tempo. A changed tempo is kept when going from Listen to Practice and back to the library, until another song is selected.
 2. Press **Start practice** without setting up the microphone: the page explains this and offers **Audio setup…**.
 3. Practice the **Introductory exercise** at 60 bpm. The score scrolls smoothly and keeps the current note highlighted; completed notes get a check mark.
 4. Whistle each note for its written length: whole notes need 4 seconds, half notes 2, quarter notes 1 at 60 bpm.
