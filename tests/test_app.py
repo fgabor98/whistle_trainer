@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence
@@ -7,7 +8,9 @@ from fakes import BUILTIN, MIC, SPEAKERS, FakeAudio, FakeClock, FakeDevices, Fak
 from whistle_trainer import config, strings
 from whistle_trainer.app import MainWindow
 from whistle_trainer.audio.capture import InputProblem
-from whistle_trainer.config import Difficulty, Mode
+from whistle_trainer.config import Difficulty, Mode, Sound
+from whistle_trainer.audio.sounds import piano
+from whistle_trainer.audio.synth import whistle
 from whistle_trainer.assessment.rhythm import RhythmStatus
 from whistle_trainer.music.library import load_songs
 from whistle_trainer.storage.progress import ProgressStore
@@ -837,3 +840,43 @@ def test_turning_random_off_restores_chosen_targets(window, settings):
     page.random_check.setChecked(False)
     assert page.target_combo.isEnabled() and not page.hits_label.isVisibleTo(page)
     assert page.try_again_button.text() == strings.TEST_TRY_AGAIN
+
+
+# Piano sound
+
+def test_listen_sound_choice_is_saved_and_credited(window, playback, settings):
+    window.start_listening("introductory-exercise")
+    listen = window.listen_page
+    assert listen.sound_combo.currentData() == Sound.PIANO  # the default
+    assert listen.credit_label.isVisibleTo(listen)
+    listen.sound_combo.setCurrentIndex(listen.sound_combo.findData(Sound.WHISTLE))
+    assert settings.settings.listen_sound is Sound.WHISTLE and settings.path.exists()
+    assert not listen.credit_label.isVisibleTo(listen)
+    listen.sound_combo.setCurrentIndex(listen.sound_combo.findData(Sound.PIANO))
+    assert settings.settings.listen_sound is Sound.PIANO
+    assert listen.credit_label.isVisibleTo(listen)
+    listen.play_note(0)  # G5, four beats at 60 bpm
+    _, samples = playback.scheduled[-1]
+    assert np.array_equal(samples, piano(listen.song.events[0].pitch.frequency(), 4.0, playback.rate))
+
+
+def test_hear_note_uses_the_chosen_sound(window, audio, playback, settings):
+    page = start_intro(window, settings)
+    page.hear_button.click()  # piano by default
+    _, samples = playback.scheduled[-1]
+    assert np.array_equal(samples, piano(page.event.pitch.frequency(), config.REFERENCE_NOTE_S, playback.rate))
+    settings.settings.listen_sound = Sound.WHISTLE
+    page.hear_button.click()
+    _, samples = playback.scheduled[-1]
+    assert np.array_equal(samples, whistle(page.event.pitch.frequency(), config.REFERENCE_NOTE_S, playback.rate))
+
+
+def test_song_opened_without_selecting_it_starts_at_its_own_tempo(qtbot, tmp_path, devices, audio, playback):
+    path = tmp_path / "settings.json"
+    path.write_text('{"schema_version": 1, "song_preferences": {"twinkle-twinkle-little-star": {"mode": "guided"}}}')
+    settings = SettingsStore(path)
+    settings.load()
+    window = MainWindow(load_songs(), settings, ProgressStore(tmp_path / "progress.json"), devices, audio, playback)
+    qtbot.addWidget(window)
+    window.start_listening("twinkle-twinkle-little-star")  # never selected in the library
+    assert window.listen_page.tempo_spin.value() == 90

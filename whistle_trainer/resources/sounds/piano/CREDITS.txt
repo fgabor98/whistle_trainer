@@ -1,0 +1,14 @@
+Piano samples
+
+Salamander Grand Piano V3 by Alexander Holm
+https://archive.org/details/SalamanderGrandPianoV3
+Taken from the SFZ edition at https://github.com/sfzinstruments/SalamanderGrandPiano
+(Samples/<note>v10.flac).
+
+Licensed under the Creative Commons Attribution 3.0 Unported license (CC BY 3.0):
+https://creativecommons.org/licenses/by/3.0/ (full text in LICENSE.txt).
+
+Changes made for Whistle Trainer by scripts/make_piano_samples.py: 15 notes from C4 to F#7
+at velocity layer 10, mixed to mono, trimmed to the hammer strike, retuned to exact
+equal-tempered pitch, shortened to 4 seconds with a fade-out, normalized, and converted
+to 16-bit WAV. Files are named by MIDI note number (60 = C4).

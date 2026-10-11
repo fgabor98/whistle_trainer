@@ -8,7 +8,7 @@ from pathlib import Path
 import platformdirs
 
 from whistle_trainer import config, strings
-from whistle_trainer.config import Difficulty, Mode
+from whistle_trainer.config import Difficulty, Mode, Sound
 from whistle_trainer.storage.jsonfile import UnreadableFile, quarantine, read_json, require, write_json_atomic
 
 SCHEMA_VERSION = 1
@@ -46,8 +46,8 @@ class SongPreferences:
     mode: Mode = config.DEFAULT_MODE
     difficulty: Difficulty = config.DEFAULT_DIFFICULTY
     # The tempo of the current session with this song. It is not saved: each time the
-    # song is selected it starts again at the song's own tempo.
-    tempo: int = config.DEFAULT_TEMPO
+    # song is selected it starts again at the song's own tempo. None until first used.
+    tempo: int | None = None
     transposition: int = 0
 
     @classmethod
@@ -74,14 +74,16 @@ class Settings:
     calibrations: dict[str, Calibration] = field(default_factory=dict)
     show_note_names: bool = config.SHOW_NOTE_NAMES
     metronome_sound: bool = False
+    listen_sound: Sound = Sound.PIANO  # Listen page and Hear note
     last_song_id: str | None = None
     song_preferences: dict[str, SongPreferences] = field(default_factory=dict)
 
     def preferences_for(self, song_id: str, default_tempo: int) -> SongPreferences:
-        """Saved preferences for a song, or defaults using the song's own tempo."""
-        if song_id not in self.song_preferences:
-            self.song_preferences[song_id] = SongPreferences(tempo=default_tempo)
-        return self.song_preferences[song_id]
+        """Saved preferences for a song, or defaults; a tempo not yet set is the song's own."""
+        preferences = self.song_preferences.setdefault(song_id, SongPreferences())
+        if preferences.tempo is None:
+            preferences.tempo = default_tempo
+        return preferences
 
     def to_dict(self) -> dict:
         data = {"schema_version": SCHEMA_VERSION, **asdict(self)}
@@ -104,6 +106,7 @@ class Settings:
             },
             show_note_names=require(data, "show_note_names", bool, config.SHOW_NOTE_NAMES),
             metronome_sound=require(data, "metronome_sound", bool, False),
+            listen_sound=_sound(require(data, "listen_sound", str, Sound.PIANO)),
             last_song_id=require(data, "last_song_id", str),
             song_preferences={
                 song_id: SongPreferences.from_dict(_object(value))
@@ -141,6 +144,13 @@ def _required(data: dict, key: str, kind):
     if value is None:
         raise UnreadableFile(f"{key!r} is missing")
     return value
+
+
+def _sound(value: str) -> Sound:
+    try:
+        return Sound(value)
+    except ValueError as error:
+        raise UnreadableFile(str(error)) from error
 
 
 def _object(value) -> dict:

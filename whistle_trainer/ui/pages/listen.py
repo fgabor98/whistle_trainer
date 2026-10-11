@@ -7,10 +7,11 @@ from fractions import Fraction
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QSpinBox, QVBoxLayout, QWidget
 
 from whistle_trainer import config, strings
-from whistle_trainer.audio.synth import whistle
+from whistle_trainer.audio.sounds import render
+from whistle_trainer.config import Sound
 from whistle_trainer.music.model import Event, Song
 from whistle_trainer.music.timing import seconds
 from whistle_trainer.music.transpose import transpose_song
@@ -73,12 +74,22 @@ class ListenPage(QWidget):
         self.transposition_spin.setRange(config.MIN_TRANSPOSITION, config.MAX_TRANSPOSITION)
         self.transposition_spin.setSuffix(strings.TRANSPOSITION_SUFFIX)
         self.transposition_spin.valueChanged.connect(self._on_settings_changed)
+        self.sound_combo = QComboBox()
+        for sound in Sound:
+            self.sound_combo.addItem(strings.SOUND_NAMES[sound], sound)
+        self.sound_combo.setCurrentIndex(self.sound_combo.findData(settings.settings.listen_sound))
+        self.sound_combo.currentIndexChanged.connect(self._on_sound_changed)
+        self.credit_label = QLabel(strings.PIANO_CREDIT)
+        self.credit_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        credit_font = self.credit_label.font()
+        credit_font.setPointSizeF(credit_font.pointSizeF() * 0.85)
+        self.credit_label.setFont(credit_font)
         form = QHBoxLayout()
         form.addStretch()
-        for label, spin in ((strings.LISTEN_TEMPO, self.tempo_spin),
-                            (strings.LISTEN_TRANSPOSITION, self.transposition_spin)):
+        for label, widget in ((strings.LISTEN_SOUND, self.sound_combo), (strings.LISTEN_TEMPO, self.tempo_spin),
+                              (strings.LISTEN_TRANSPOSITION, self.transposition_spin)):
             form.addWidget(QLabel(label))
-            form.addWidget(spin)
+            form.addWidget(widget)
             form.addSpacing(16)
         form.addStretch()
 
@@ -102,6 +113,7 @@ class ListenPage(QWidget):
         layout.addWidget(self.hint_label)
         layout.addLayout(buttons)
         layout.addLayout(form)
+        layout.addWidget(self.credit_label)
 
         for key, action in ((Qt.Key.Key_Space, self.toggle_play), (Qt.Key.Key_Left, self.previous_note),
                             (Qt.Key.Key_Right, self.next_note)):
@@ -152,6 +164,9 @@ class ListenPage(QWidget):
 
     def activate(self) -> None:
         self.message = None
+        self.sound_combo.blockSignals(True)
+        self.sound_combo.setCurrentIndex(self.sound_combo.findData(self.sound))
+        self.sound_combo.blockSignals(False)
         self._update()
 
     def deactivate(self) -> None:
@@ -172,8 +187,19 @@ class ListenPage(QWidget):
         self._update()
         return False
 
+    @property
+    def sound(self) -> Sound:
+        return self.store.settings.listen_sound
+
+    def _on_sound_changed(self) -> None:
+        self.stop()
+        # Qt returns combo box data as plain strings.
+        self.store.settings.listen_sound = Sound(self.sound_combo.currentData())
+        self.store.save()
+        self._update()
+
     def _render(self, event: Event) -> object:
-        return whistle(event.pitch.frequency(), seconds(event.duration, self.preferences.tempo),
+        return render(self.sound, event.pitch.frequency(), seconds(event.duration, self.preferences.tempo),
                        self.playback.rate, seed=event.index)
 
     def toggle_play(self) -> None:
@@ -262,6 +288,7 @@ class ListenPage(QWidget):
         self.note_label.setText(strings.LISTEN_NOTE.format(note=event.pitch.name, beats=beats) if event.is_note
                                 else strings.LISTEN_REST.format(beats=beats))
         self.hint_label.setText(self.message or strings.LISTEN_HINT)
+        self.credit_label.setVisible(self.sound is Sound.PIANO)
         self.play_button.setText(strings.LISTEN_STOP if self.playing else strings.LISTEN_PLAY)
         self.previous_button.setEnabled(self.position > 0)
         self.next_button.setEnabled(self.position < len(self.song.events) - 1)

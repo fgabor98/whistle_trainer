@@ -68,7 +68,9 @@ Then press **Listen…** to hear the song, **Start practice** (or double-click t
 
 ### 3. Listen to the song
 
-The Listen page plays the song from the computer with a whistle-like tone, so you can hear how it should sound. The microphone is not used.
+The Listen page plays the song from the computer so you can hear how it should sound. The microphone is not used.
+
+- **Sound:** **Piano** (a recorded concert grand, the default) or **Whistle** (a whistle-like tone, the sound you will imitate). The choice is remembered and also used by **Hear note** during practice.
 
 - **Play song** plays from the highlighted note to the end; the highlight follows the notes. **Stop** keeps your place.
 - **Previous note** and **Next note** (or the arrow keys) play one note at a time. Click any note to hear it. Rests are highlighted silently.
@@ -128,6 +130,11 @@ Microphone audio is analyzed in memory and immediately discarded. It is never re
 Settings are saved in `~/.config/whistle-trainer/` and progress in `~/.local/share/whistle-trainer/`. If one of these files becomes unreadable, the app starts with defaults, keeps the old file with a `.corrupt` suffix, and tells you.
 
 **Reset progress…** in the preparation panel clears one song's progress, and **Reset all data…** below the song list clears all settings and progress. Both ask first.
+
+## Credits
+
+- Music font: [Bravura](https://github.com/steinbergmedia/bravura) by Steinberg Media Technologies, SIL Open Font License.
+- Piano sound: [Salamander Grand Piano V3](https://archive.org/details/SalamanderGrandPianoV3) by Alexander Holm, [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). The bundled samples were converted, retuned to exact pitch, and shortened; see `whistle_trainer/resources/sounds/piano/CREDITS.txt`.
 
 ## For developers
 

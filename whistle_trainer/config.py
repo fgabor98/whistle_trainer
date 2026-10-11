@@ -13,6 +13,13 @@ class Difficulty(StrEnum):
     STANDARD = "standard"
 
 
+class Sound(StrEnum):
+    """How Listen and Hear note play notes. The first one is the default."""
+
+    PIANO = "piano"
+    WHISTLE = "whistle"
+
+
 DEFAULT_MODE = Mode.GUIDED
 DEFAULT_DIFFICULTY = Difficulty.EASY
 
@@ -88,3 +95,6 @@ COUNT_IN_LEAD_S = 0.5
 # ignored after it ends so the app cannot hear itself.
 REFERENCE_NOTE_S = 1.0
 REFERENCE_SETTLE_S = 0.300
+
+# Piano notes end like a released key: a short fade-out at the end of the note.
+PIANO_RELEASE_S = 0.060

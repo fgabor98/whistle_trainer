@@ -34,7 +34,7 @@ Accompaniment, lyrics, harmony, automatic transcription, arbitrary score imports
 | --- | --- |
 | Song library and preparation | Song title, length, range, progress, introductory exercise, mode, tempo, difficulty, transposition, preview, Start, and Audio setup. |
 | Audio setup | Input selector, activity meter, reliable detected note, setup status, Test input, and Repeat setup. Identify unavailable devices without silently switching inputs. Test input offers a chosen target note, or random target notes that change to a new one each time the current one is hit. |
-| Listen | Score with the playing note highlighted, Play song, Stop, Previous note, Next note, tempo, transposition, and Practice. Capture is off. |
+| Listen | Score with the playing note highlighted, Play song, Stop, Previous note, Next note, tempo, transposition, sound (Whistle or Piano), and Practice. Capture is off. |
 | Practice | Score with current and upcoming notes, target name and octave, reliable detected note, pitch direction, hold progress, selected input, and listening status. Rhythm mode adds visual beats and a count-in. |
 | Summary | Mode, completed song or section, active practice time, notes needing the most retries, and replay options. |
 
@@ -80,13 +80,13 @@ A missing or wrongly timed onset, insufficient hold, excessive interruption, or 
 
 ### Reference playback
 
-Hear target note plays a short reference while assessment is suspended, followed by a settling period. This prevents the app's own output from completing a note. Return to the same target with unfinished hold progress reset. In rhythm mode, wait for Retry and a new count-in.
+Hear target note plays a short reference, in the sound chosen on the Listen page, while assessment is suspended, followed by a settling period. This prevents the app's own output from completing a note. Return to the same target with unfinished hold progress reset. In rhythm mode, wait for Retry and a new count-in.
 
 Full melody preview is available before practice or while paused through Listen mode.
 
 ### Listen mode
 
-Listen mode plays the loaded song from the computer so users can learn how it should sound before whistling it. It never captures or assesses audio, and records no practice progress or retries. Playback uses the selected tempo and transposition and a clear, whistle-like tone at a comfortable fixed volume.
+Listen mode plays the loaded song from the computer so users can learn how it should sound before whistling it. It never captures or assesses audio, and records no practice progress or retries. Playback uses the selected tempo and transposition at a comfortable fixed volume, in one of two sounds: a recorded classical grand piano (the default), or a clear, whistle-like tone. The choice is remembered and also used by Hear target note.
 
 - **Play song:** One click plays the whole melody from the selected note to the end, observing written durations, ties, and rests. The score highlights and scrolls to each note as it sounds. Stop halts playback and keeps the highlight on the last played note; playing again resumes from there, or from the start after the song has finished.
 - **Note by note:** Next note and Previous note move the highlight and play that single note for its written duration at the selected tempo; tied notes play as one sound. Selecting a note on the score plays it and makes it the current position. Rests are highlighted silently with “Rest” and its duration shown.

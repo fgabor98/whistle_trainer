@@ -210,3 +210,7 @@ LIBRARY_RESET_ALL_CONFIRM = (
     "will be deleted. This cannot be undone."
 )
 LIBRARY_RANGE = "Range: {low}–{high} (as whistled)"
+
+LISTEN_SOUND = "Sound:"
+SOUND_NAMES = {"whistle": "Whistle", "piano": "Piano"}
+PIANO_CREDIT = "Piano: Salamander Grand Piano by Alexander Holm, CC BY 3.0"

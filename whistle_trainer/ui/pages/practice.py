@@ -25,7 +25,8 @@ from whistle_trainer.assessment.guided import GuidedEngine
 from whistle_trainer.assessment.hold import HoldStatus
 from whistle_trainer.assessment.rhythm import RhythmEngine, RhythmStatus
 from whistle_trainer.audio.capture import InputProblem
-from whistle_trainer.audio.synth import click, whistle
+from whistle_trainer.audio.sounds import render
+from whistle_trainer.audio.synth import click
 from whistle_trainer.config import Difficulty, Mode
 from whistle_trainer.music.model import Event, Song
 from whistle_trainer.music.transpose import transpose_song
@@ -442,7 +443,8 @@ class PracticePage(QWidget):
         if not self.can_hear_note() or not self.event.is_note or not self._open_output():
             return
         self.playback.clear()
-        self.playback.schedule(whistle(self.event.pitch.frequency(), config.REFERENCE_NOTE_S, self.playback.rate))
+        self.playback.schedule(render(self.settings.listen_sound, self.event.pitch.frequency(),
+                                      config.REFERENCE_NOTE_S, self.playback.rate))
         now = self.capture_now()
         if self.state is PracticeState.RUNNING and now is not None:
             self._ignore_until = now + config.REFERENCE_NOTE_S + config.REFERENCE_SETTLE_S
