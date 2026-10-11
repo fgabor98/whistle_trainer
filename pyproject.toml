@@ -1,0 +1,9 @@
+[project]
+name = "whistle-trainer"
+version = "0.1.0"
+description = "Learn to whistle melodies from sheet music."
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+qt_api = "pyside6"
