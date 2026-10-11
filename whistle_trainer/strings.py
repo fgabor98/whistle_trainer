@@ -80,6 +80,10 @@ TEST_DIFFICULTY = "Difficulty:"
 TEST_TRY_AGAIN = "Try again"
 TEST_TARGET_LABEL = "Whistle {note}"
 TEST_PASSED = "✓ Well done! Press Try again or choose another note."
+TEST_RANDOM = "Random note"
+TEST_RANDOM_PASSED = "✓ Well done! Here comes the next note…"
+TEST_NEW_NOTE = "New note"
+TEST_HITS = "Notes hit: {count}"
 TEST_NOT_SET_UP = "Set up this input first on the Audio setup page."
 
 DIFFICULTY_NAMES = {"easy": "Easy", "standard": "Standard"}

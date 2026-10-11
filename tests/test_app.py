@@ -781,3 +781,59 @@ def test_escape_returns_to_library(window, audio, settings):
     assert window.escape_shortcut.key() == QKeySequence(Qt.Key.Key_Escape)
     window.escape_shortcut.activated.emit()
     assert window.pages.currentWidget() is window.library_page and not audio.running
+
+
+# Test input: random notes
+
+def hz(midi: int) -> float:
+    return 440.0 * 2 ** ((midi - 69) / 12)
+
+
+def test_random_notes_move_on_after_each_hit(window, audio, settings):
+    calibrate(settings, MIC)
+    window.show_page(window.test_input_page)
+    page = window.test_input_page
+    page.random_check.setChecked(True)
+    assert not page.target_combo.isEnabled() and page.hits_label.isVisibleTo(page)
+    assert page.try_again_button.text() == strings.TEST_NEW_NOTE
+    assert page.hits_label.text() == strings.TEST_HITS.format(count=0)
+
+    targets = []
+    script = FrameScript()
+    for expected_hits in (1, 2, 3):
+        target = page.target_combo.currentData()
+        targets.append(target)
+        low, high = config.TEST_RANDOM_DEFAULT_RANGE
+        assert low <= target <= high
+        audio.send(script.pitched(hz(target), 1.0).frames[-100:])
+        assert page.guide_label.text() == strings.TEST_RANDOM_PASSED
+        assert page.hits_label.text() == strings.TEST_HITS.format(count=expected_hits)
+        audio.send(script.quiet(1.4).frames[-140:])
+        assert page.target_combo.currentData() == target  # still showing the hit
+        audio.send(script.quiet(0.2).frames[-20:])
+        assert page.target_combo.currentData() != target  # a new note
+        assert page.hold.progress == 0
+    assert all(a != b for a, b in zip(targets, targets[1:]))
+
+
+def test_random_notes_use_measured_range_and_never_repeat(window, settings):
+    calibrate(settings, MIC, low=79, high=81)  # G5 to A5: three notes
+    window.show_page(window.test_input_page)
+    page = window.test_input_page
+    page.random_check.setChecked(True)
+    seen = [page.target_combo.currentData()]
+    for _ in range(30):
+        page.try_again_button.click()  # New note
+        seen.append(page.target_combo.currentData())
+    assert set(seen) <= {79, 80, 81}
+    assert all(a != b for a, b in zip(seen, seen[1:]))
+
+
+def test_turning_random_off_restores_chosen_targets(window, settings):
+    calibrate(settings, MIC)
+    window.show_page(window.test_input_page)
+    page = window.test_input_page
+    page.random_check.setChecked(True)
+    page.random_check.setChecked(False)
+    assert page.target_combo.isEnabled() and not page.hits_label.isVisibleTo(page)
+    assert page.try_again_button.text() == strings.TEST_TRY_AGAIN

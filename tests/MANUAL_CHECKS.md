@@ -27,7 +27,8 @@ Checks that need a real microphone and a real whistle. Run them on the reference
 13. Whistle the target an octave higher or lower: it never passes.
 14. Break off briefly (a quick breath) while holding: the bar pauses ("Keep going"). Stop for longer: the bar resets.
 15. Talk, clap, and hum near the microphone: no note passes.
-16. Note how quickly the detected note and meter react. They should feel immediate, with a delay of no more than about 150 ms.
+16. Tick **Random note**: a random target appears; hit it and a different one follows after about 1.5 seconds, and **Notes hit** counts up. **New note** skips to another note. The targets stay within your measured range.
+17. Note how quickly the detected note and meter react. They should feel immediate, with a delay of no more than about 150 ms.
 
 ### Measurements to record
 

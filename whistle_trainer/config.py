@@ -75,6 +75,10 @@ SETUP_RANGE_PAUSE_S = 3.0
 
 # Test input: required hold of the single target note.
 TEST_NOTE_HOLD_S = 1.0
+# Random notes: the range used when no comfortable range was measured (D5 to E6, the
+# range of the bundled songs), and the pause before the next note after a hit.
+TEST_RANDOM_DEFAULT_RANGE = (74, 88)
+TEST_RANDOM_NEXT_S = 1.5
 
 # Rhythm mode: the count-in starts this long after the latest analyzed frame,
 # leaving time to schedule the first clicks ahead of the output buffer.

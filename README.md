@@ -42,7 +42,7 @@ If setup reports a problem, follow its suggestion (whistle closer, raise the inp
 
 The app never switches microphones on its own. If your microphone is unplugged, it says so and stops listening until you choose an input again. A **● Listening** indicator in the top right corner shows whenever the microphone is in use: only on the Audio setup, Test input, and practice pages.
 
-**Test input** lets you try a single note: pick a target and a difficulty, and whistle until the bar fills (1 second).
+**Test input** lets you try a single note: pick a target and a difficulty, and whistle until the bar fills (1 second). Tick **Random note** for ear and pitch training: the app picks a random note from your comfortable range (or D5–E6 if you have not measured it), and each time you hit it, a new one appears after a moment. **New note** skips to another one, and the counter shows how many notes you have hit.
 
 ### 2. Choose a song
 
