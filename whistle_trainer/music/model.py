@@ -68,10 +68,11 @@ class EventKind(StrEnum):
 class NotatedPart:
     """One written note or rest. A tied chain of notes has several parts."""
 
-    duration: Fraction
+    duration: Fraction  # sounding length in quarter notes
     note_type: str | None  # None for a whole-measure rest
     dots: int
     measure_index: int
+    tuplet: tuple[int, int] | None = None  # (actual, normal) notes, such as (3, 2) for a triplet
 
 
 @dataclass(frozen=True)

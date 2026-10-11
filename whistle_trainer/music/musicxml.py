@@ -36,7 +36,6 @@ _REJECTED_NOTE_ELEMENTS = {
     "chord": "chords are not supported; use a single melodic line",
     "grace": "grace notes are not supported",
     "cue": "cue notes are not supported",
-    "time-modification": "tuplets are not supported",
     "unpitched": "unpitched notes are not supported",
 }
 _JUMP_ATTRIBUTES = ("dacapo", "dalsegno", "tocoda", "fine", "segno", "coda")
@@ -67,6 +66,7 @@ class _WrittenNote:
     measure_number: str
     tie_start: bool
     tie_stop: bool
+    tuplet: tuple[int, int] | None = None
 
 
 @dataclass
@@ -252,11 +252,17 @@ class _Parser:
         rest = element.find("rest")
         note_type = element.findtext("type")
         dots = len(element.findall("dot"))
+        tuplet = self.read_tuplet(element)
+        if tuplet is not None and note_type is None:
+            raise self.error("a tuplet note has no written type")
         if note_type is not None:
             note_type = note_type.strip()
             if note_type not in NOTE_TYPES:
                 raise self.error(f"note type {note_type!r} is not supported")
-            if notated_length(note_type, dots) != duration:
+            written = notated_length(note_type, dots)
+            if tuplet is not None:
+                written = written * tuplet[1] / tuplet[0]
+            if written != duration:
                 raise self.error("a note's duration does not match its written type")
         elif rest is None or rest.get("measure") != "yes":
             note_type, dots = _type_for(duration) or (None, 0)
@@ -269,8 +275,18 @@ class _Parser:
             raise self.error("rests cannot be tied")
         return _WrittenNote(
             pitch, duration, note_type, dots, measure_index, self.measure,
-            tie_start="start" in ties, tie_stop="stop" in ties,
+            tie_start="start" in ties, tie_stop="stop" in ties, tuplet=tuplet,
         )
+
+    def read_tuplet(self, element: ET.Element) -> tuple[int, int] | None:
+        modification = element.find("time-modification")
+        if modification is None:
+            return None
+        actual = self.parse_positive_int(modification.findtext("actual-notes"), "tuplet actual notes")
+        normal = self.parse_positive_int(modification.findtext("normal-notes"), "tuplet normal notes")
+        if modification.find("normal-type") is not None or modification.find("normal-dot") is not None:
+            raise self.error("tuplets with a different normal note type are not supported")
+        return None if actual == normal else (actual, normal)
 
     def read_pitch(self, element: ET.Element) -> Pitch:
         pitch = element.find("pitch")
@@ -302,7 +318,7 @@ class _Parser:
             nonlocal chain, chain_pitch
             duration = sum((n.duration for n in chain), Fraction(0))
             kind = EventKind.NOTE if chain_pitch else EventKind.REST
-            parts = tuple(NotatedPart(n.duration, n.note_type, n.dots, n.measure_index) for n in chain)
+            parts = tuple(NotatedPart(n.duration, n.note_type, n.dots, n.measure_index, n.tuplet) for n in chain)
             events.append(Event(len(events), kind, chain_pitch, position - duration, duration, parts))
             chain, chain_pitch = [], None
 

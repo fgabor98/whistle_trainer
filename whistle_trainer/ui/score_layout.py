@@ -7,6 +7,7 @@ Staff positions count half spaces from the bottom line (E4 = 0, top line F5 = 8)
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from fractions import Fraction
 
 from whistle_trainer.config import WRITTEN_OCTAVE_OFFSET
 from whistle_trainer.music.model import STEPS, Pitch, Song
@@ -54,6 +55,8 @@ class PartLayout:
     stem_up: bool
     tied_to_next: bool
     beamed: bool = False  # drawn with a beam instead of a flag
+    tuplet: tuple[int, int] | None = None
+    duration: Fraction = Fraction(0)  # sounding length in quarter notes
 
     @property
     def head_width(self) -> float:
@@ -83,6 +86,7 @@ class ScoreLayout:
     barlines: list[float]
     width: float
     beams: list[tuple[int, int]] = field(default_factory=list)  # indexes into parts
+    tuplets: list[tuple[int, int, int]] = field(default_factory=list)  # first part, last part, number
 
 
 def layout_song(song: Song) -> ScoreLayout:
@@ -142,6 +146,8 @@ def layout_song(song: Song) -> ScoreLayout:
                     accidental=accidental,
                     stem_up=position is not None and position < 4,
                     tied_to_next=part_number < len(event.parts) - 1,
+                    tuplet=part.tuplet,
+                    duration=part.duration,
                 )
                 advance = part_advance(float(part.duration), accidental is not None)
             parts.append(layout)
@@ -156,7 +162,31 @@ def layout_song(song: Song) -> ScoreLayout:
     barlines.append(x - 0.6)
     layout = ScoreLayout(key_x, signature, time_x, (song.time.beats, song.time.beat_type), parts, events, barlines, x)
     layout.beams = _beam_eighth_pairs(song, parts)
+    layout.tuplets = _tuplet_groups(parts)
     return layout
+
+
+def _tuplet_groups(parts: list[PartLayout]) -> list[tuple[int, int, int]]:
+    """Runs of tuplet parts with the same ratio in one measure, closed when their total length
+    is a plain note value again (a power-of-two fraction of a quarter, as for three triplet eighths)."""
+    groups = []
+    start: int | None = None
+    total = Fraction(0)
+    for i, part in enumerate(parts):
+        if start is not None and (part.tuplet != parts[start].tuplet or part.measure_index != parts[start].measure_index):
+            groups.append((start, i - 1, parts[start].tuplet[0]))
+            start = None
+        if part.tuplet is None:
+            continue
+        if start is None:
+            start, total = i, Fraction(0)
+        total += part.duration
+        if total.denominator & (total.denominator - 1) == 0:  # complete
+            groups.append((start, i, part.tuplet[0]))
+            start = None
+    if start is not None:
+        groups.append((start, len(parts) - 1, parts[start].tuplet[0]))
+    return groups
 
 
 def _beam_eighth_pairs(song: Song, parts: list[PartLayout]) -> list[tuple[int, int]]:
@@ -164,7 +194,8 @@ def _beam_eighth_pairs(song: Song, parts: list[PartLayout]) -> list[tuple[int, i
     beat = float(song.time.beat_length)
     beams = []
     for i, (first, second) in enumerate(zip(parts, parts[1:])):
-        if any(p.note_type != "eighth" or p.dots or p.position is None or p.beamed for p in (first, second)):
+        if any(p.note_type != "eighth" or p.dots or p.position is None or p.beamed or p.tuplet
+               for p in (first, second)):
             continue
         measure = song.measures[first.measure_index]
         offset = first.start - float(measure.start)

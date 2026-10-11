@@ -230,6 +230,9 @@ class ScoreView(QWidget):
             first, second = layout.parts[a], layout.parts[b]
             if visible[0] <= first.x <= visible[1] or visible[0] <= second.x <= visible[1]:
                 self._draw_beam(painter, first, second)
+        for a, b, number in layout.tuplets:
+            if layout.parts[b].x >= visible[0] and layout.parts[a].x <= visible[1]:
+                self._draw_tuplet(painter, layout.parts[a:b + 1], number)
 
         label_font = QFont(self.font())
         label_font.setPixelSize(max(1, round(sp * 1.3)))
@@ -336,6 +339,33 @@ class ScoreView(QWidget):
         painter.setBrush(self._part_color(first))
         painter.drawPath(path)
         painter.setBrush(Qt.BrushStyle.NoBrush)
+
+    def _draw_tuplet(self, painter: QPainter, parts: list[PartLayout], number: int) -> None:
+        """A bracket with the tuplet number above the group, clear of stems and the staff."""
+        sp = self.space
+        positions = [p.position for p in parts if p.position is not None]
+        top = max([8, *(position + (7 if part.stem_up else 2) for part, position
+                        in ((p, p.position) for p in parts if p.position is not None))]) if positions else 8
+        y = self.y_for(top + 2)
+        left = self.x_for(parts[0].x)
+        right = self.x_for(parts[-1].x + parts[-1].head_width)
+        middle = (left + right) / 2
+        color = self._part_color(parts[0])
+        painter.setPen(QPen(color, 0.12 * sp))
+        gap = 0.9 * sp
+        hook = 0.6 * sp
+        painter.drawLine(QPointF(left, y + hook), QPointF(left, y))
+        painter.drawLine(QPointF(left, y), QPointF(middle - gap, y))
+        painter.drawLine(QPointF(middle + gap, y), QPointF(right, y))
+        painter.drawLine(QPointF(right, y), QPointF(right, y + hook))
+        label_font = QFont(self.font())
+        label_font.setPixelSize(max(1, round(sp * 1.4)))
+        label_font.setItalic(True)
+        painter.setFont(label_font)
+        painter.drawText(QRectF(middle - gap, y - sp, 2 * gap, 2 * sp), Qt.AlignmentFlag.AlignCenter, str(number))
+        music = QFont(music_font_family())
+        music.setPixelSize(max(1, round(4 * sp)))
+        painter.setFont(music)
 
     def _draw_tie(self, painter: QPainter, part: PartLayout, color: QColor) -> None:
         layout = self.layout_data

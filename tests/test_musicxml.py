@@ -116,8 +116,6 @@ def test_tempo(parse, header, expected):
     (score(whole() + "<backup><duration>8</duration></backup>" + whole()), "voices"),
     (score(note("C5", extra="<voice>1</voice>") + note("D5", extra="<voice>2</voice>") + note() + note()), "voices"),
     (score("<note><grace/><pitch><step>C</step><octave>5</octave></pitch><type>eighth</type></note>" + whole()), "grace"),
-    (score(note("C5", 1, "eighth", "<time-modification><actual-notes>3</actual-notes></time-modification>")
-           + whole()), "tuplets"),
     (score(note("C5", 1, "quarter") * 4), "does not match its written type"),
     (score(note("C5", 5, None) + note("C5", 3, None)), "cannot be written as one note"),
     (score(whole() + '<barline><repeat direction="backward"/></barline>'), "repeats"),
@@ -194,3 +192,32 @@ def test_load_errors_are_collected(tmp_path):
     library = load_songs(tmp_path)
     assert [s.id for s in library.songs] == ["good"]
     assert [e.file for e in library.errors] == ["bad.musicxml"]
+
+
+TRIPLET = "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>"
+SIX = DEFAULT_ATTRIBUTES.replace("<divisions>2</divisions>", "<divisions>6</divisions>")
+
+
+def test_triplets_are_read_with_their_sounding_length(parse):
+    triplet_eighth = note("C5", 2, "eighth", TRIPLET)
+    triplet_quarter = note("D5", 4, "quarter", TRIPLET)
+    song = parse(score(triplet_eighth * 3 + triplet_quarter + note("E5", 2, "eighth", TRIPLET)
+                       + note("F5", 12, "half"), attributes=SIX))
+    assert [e.duration for e in song.events] == [Fraction(1, 3)] * 3 + [Fraction(2, 3), Fraction(1, 3), 2]
+    assert [e.start for e in song.events][3:5] == [1, Fraction(5, 3)]
+    assert song.events[0].parts[0].tuplet == (3, 2)
+    assert song.events[5].parts[0].tuplet is None
+    assert song.length == 4
+
+
+@pytest.mark.parametrize("text, message", [
+    (score(note("C5", 3, "eighth", TRIPLET) + note("C5", 21, "half", dots=2), attributes=SIX),
+     "does not match its written type"),
+    (score(note("C5", 2, None, TRIPLET) + note("C5", 22, None), attributes=SIX), "no written type"),
+    (score(note("C5", 2, "eighth", TRIPLET.replace("</time-modification>",
+                                                   "<normal-type>quarter</normal-type></time-modification>")) * 3
+           + note("C5", 18, "half", dots=1), attributes=SIX), "different normal note type"),
+])
+def test_rejects_invalid_tuplets(parse, text, message):
+    with pytest.raises(SongFormatError, match=message):
+        parse(text)

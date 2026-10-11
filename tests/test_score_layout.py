@@ -84,3 +84,29 @@ def test_score_view_scrolls_to_keep_current_note_visible(qtbot):
     center = view.x_for(view.layout_data.events[40].center)
     assert abs(center - 200) < 1
     view.grab()  # paints without errors
+
+
+TRIPLET = "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>"
+SIX = DEFAULT_ATTRIBUTES.replace("<divisions>2</divisions>", "<divisions>6</divisions>")
+
+
+def test_triplets_are_grouped_until_a_full_beat(parse):
+    song = parse(score(
+        note("C5", 2, "eighth", TRIPLET) * 3            # one group of three eighths
+        + note("D5", 4, "quarter", TRIPLET) + note("E5", 2, "eighth", TRIPLET)  # quarter + eighth
+        + note("F5", 6, "quarter") + note("G5", 6, "quarter"),
+        attributes=SIX,
+    ))
+    layout = layout_song(song)
+    assert layout.tuplets == [(0, 2, 3), (3, 4, 3)]
+    assert layout.beams == []  # triplet eighths are not beamed as pairs
+
+
+def test_triplets_draw_without_errors(parse, qtbot):
+    song = parse(score(note("C5", 2, "eighth", TRIPLET) * 3 + note("D5", 18, "half", dots=1), attributes=SIX))
+    view = ScoreView()
+    qtbot.addWidget(view)
+    view.resize(600, 240)
+    view.set_song(song)
+    view.set_current(0, animate=False)
+    view.grab()
