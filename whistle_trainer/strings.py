@@ -68,10 +68,11 @@ SETUP_TOO_QUIET = (
     "The whistle is too quiet compared with the background ({whistle:.0f} dB against {noise:.0f} dB). "
     "Move closer to the microphone, raise the input volume, or reduce background noise, then press Repeat setup."
 )
-SETUP_RANGE_LOW = "Whistle your lowest comfortable note and hold it."
-SETUP_RANGE_HIGH = "Now whistle your highest comfortable note and hold it."
+SETUP_RANGE_LOW = "Whistle your lowest comfortable note and hold it for two seconds."
+SETUP_RANGE_PAUSE = "Low note: {low}. Take a breath. Next, your highest comfortable note."
+SETUP_RANGE_HIGH = "Now whistle your highest comfortable note and hold it for two seconds."
 SETUP_RANGE_DONE = "Your comfortable range is {low}–{high}. Songs can be transposed to fit it."
-SETUP_RANGE_FAILED = "Your range could not be measured. Whistle each note steadily for a second, then try again."
+SETUP_RANGE_FAILED = "Your range could not be measured. Whistle each note steadily for two seconds, then try again."
 SETUP_RANGE_SAVED = "Measured range: {low}–{high}."
 
 TEST_TARGET = "Target note:"

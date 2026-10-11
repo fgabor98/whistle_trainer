@@ -126,9 +126,21 @@ def test_setup_range_measurement(window, audio, settings):
     page = window.setup_page
     page.range_button.click()
     assert page.status_label.text() == strings.SETUP_RANGE_LOW
-    audio.send(FrameScript().pitched(587.33, 1.0).frames)  # D5
+    script = FrameScript().pitched(587.33, 1.9)  # D5
+    audio.send(script.frames)
+    assert page.status_label.text() == strings.SETUP_RANGE_LOW  # two seconds are needed
+    audio.send(script.pitched(587.33, 0.1).frames[-10:])
+    assert page.status_label.text() == strings.SETUP_RANGE_PAUSE.format(low="D5")
+    pause = FrameScript()
+    pause.time = script.time
+    audio.send(pause.pitched(2000.0, 2.9).frames)  # whistling during the pause is ignored
+    assert page.status_label.text() == strings.SETUP_RANGE_PAUSE.format(low="D5")
+    assert page.progress.value() == pytest.approx(2.9 / 3.0 * 1000, abs=10)
+    audio.send(pause.quiet(0.2).frames[-20:])
     assert page.status_label.text() == strings.SETUP_RANGE_HIGH
-    audio.send(FrameScript().pitched(1760.0, 1.0).frames)  # A6
+    high = FrameScript()
+    high.time = pause.time
+    audio.send(high.pitched(1760.0, 2.0).frames)  # A6
     calibration = settings.settings.calibrations[BUILTIN.id]
     assert (calibration.practice_low_midi, calibration.practice_high_midi) == (74, 93)
     assert page.status_label.text() == strings.SETUP_RANGE_DONE.format(low="D5", high="A6")

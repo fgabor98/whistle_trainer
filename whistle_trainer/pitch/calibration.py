@@ -115,6 +115,27 @@ class RangeMeasurement:
         if len(self._pitches) * self.hop >= config.SETUP_RANGE_NOTE_S:
             self.midi = round(float(np.median(self._pitches)))
             self.done = True
-        elif frame.time - self._start >= config.SETUP_WHISTLE_TIMEOUT_S:
+        elif frame.time - self._start >= config.SETUP_RANGE_TIMEOUT_S:
             self.done = True
+        return self.done
+
+
+class Pause:
+    """A timed pause between measurements; input during it is ignored."""
+
+    def __init__(self, seconds: float):
+        self.seconds = seconds
+        self.done = False
+        self._start: float | None = None
+        self._elapsed = 0.0
+
+    def progress(self) -> float:
+        return min(1.0, self._elapsed / self.seconds)
+
+    def feed(self, frame: AnalysisFrame) -> bool:
+        """Returns True when the pause is over."""
+        if self._start is None:
+            self._start = frame.time
+        self._elapsed = frame.time - self._start
+        self.done = self.done or self._elapsed >= self.seconds
         return self.done

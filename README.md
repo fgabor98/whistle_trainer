@@ -36,7 +36,7 @@ Press **Audio setup…** in the library.
 
 1. Choose your microphone under **Input**. The app lists your PipeWire/PulseAudio devices by name and marks the system default. The **Activity** meter shows that sound is coming in. Choose where the app's sounds play under **Output**.
 2. Press **Start setup**. Stay quiet for about 3 seconds while the background is measured, then whistle one steady, comfortable note until setup completes. The app shows the measured levels and saves them for this microphone.
-3. Optionally press **Measure my range**, then whistle your lowest and highest comfortable notes. The library then suggests a transposition for each song so that it fits your range.
+3. Optionally press **Measure my range**, then whistle your lowest comfortable note and hold it for two seconds. After a short pause to take a breath, do the same with your highest comfortable note. You have up to 15 seconds for each, so you can feel your way down or up to it. The library then suggests a transposition for each song so that it fits your range.
 
 If setup reports a problem, follow its suggestion (whistle closer, raise the input volume, or reduce background noise) and press **Repeat setup**. Repeat setup when you change rooms or microphones.
 

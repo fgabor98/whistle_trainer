@@ -67,7 +67,11 @@ SETUP_WHISTLE_S = 1.5
 SETUP_WHISTLE_TIMEOUT_S = 10.0
 SETUP_MIN_MARGIN_DB = 6.0
 SETUP_MIN_USABLE_MARGIN_DB = 12.0
-SETUP_RANGE_NOTE_S = 1.0
+# Range measurement: steady pitch needed per note, time allowed per note, and the
+# pause between the low and the high note.
+SETUP_RANGE_NOTE_S = 2.0
+SETUP_RANGE_TIMEOUT_S = 15.0
+SETUP_RANGE_PAUSE_S = 3.0
 
 # Test input: required hold of the single target note.
 TEST_NOTE_HOLD_S = 1.0

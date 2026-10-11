@@ -10,7 +10,7 @@ Checks that need a real microphone and a real whistle. Run them on the reference
 2. Make a sound: the activity meter moves.
 3. Press **Start setup**, stay quiet for 3 seconds, then whistle one steady note. Setup completes and shows the background level, whistle level, and threshold.
 4. Press **Start setup** and stay silent through both steps: after 10 seconds, the "No steady whistle" message appears.
-5. Press **Measure my range** and whistle your lowest and then your highest comfortable note. The range is shown.
+5. Press **Measure my range** and hold your lowest comfortable note for two seconds. A 3-second pause follows, showing the low note, before the high note is asked for; whistling during the pause is ignored. Then hold your highest comfortable note for two seconds. The range is shown.
 6. Go **Back**: the Listening indicator disappears.
 
 ### Devices

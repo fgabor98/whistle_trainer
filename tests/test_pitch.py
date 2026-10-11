@@ -10,7 +10,7 @@ from whistle_trainer.assessment.frames import FrameClass
 from whistle_trainer.audio.capture import to_mono_float
 from whistle_trainer.pitch.analyzer import Analyzer, level_db
 from whistle_trainer.pitch.bandpass import StreamingFilter, design_bandpass
-from whistle_trainer.pitch.calibration import LevelCalibration, LevelStep, RangeMeasurement, SetupProblem
+from whistle_trainer.pitch.calibration import LevelCalibration, LevelStep, Pause, RangeMeasurement, SetupProblem
 from whistle_trainer.pitch.display import NoteDisplay, hz_to_midi
 from whistle_trainer.pitch.yin import yin
 
@@ -215,7 +215,7 @@ def test_calibration_from_real_audio():
 
 def test_range_measurement_median_note():
     measurement = RangeMeasurement(config.ANALYSIS_HOP_S)
-    script = FrameScript().quiet(0.5).pitched(880.0, 0.3).unclear(0.2).pitched(880.0 * 2 ** (20 / 1200), 0.8)
+    script = FrameScript().quiet(0.5).pitched(880.0, 0.8).unclear(0.2).pitched(880.0 * 2 ** (20 / 1200), 1.3)
     for frame in script.frames:
         if measurement.feed(frame):
             break
@@ -224,6 +224,15 @@ def test_range_measurement_median_note():
 
 def test_range_measurement_times_out():
     measurement = RangeMeasurement(config.ANALYSIS_HOP_S)
-    for frame in FrameScript().quiet(10.5).frames:
-        measurement.feed(frame)
+    frames = FrameScript().quiet(14.9).frames
+    assert not any(measurement.feed(frame) for frame in frames)
+    measurement.feed(FrameScript().quiet(15.01).frames[-1])  # the frame at 15.0 s
     assert measurement.done and measurement.midi is None
+
+
+def test_pause_ends_after_its_duration():
+    pause = Pause(3.0)
+    frames = FrameScript().quiet(3.0).frames
+    assert not any(pause.feed(frame) for frame in frames)
+    assert pause.progress() == pytest.approx(2.99 / 3.0)
+    assert pause.feed(FrameScript().quiet(3.01).frames[-1])
