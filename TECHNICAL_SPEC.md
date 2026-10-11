@@ -13,7 +13,7 @@ This document describes how Whistle Trainer is built. Product behavior, UI, asse
 | Bundled songs | Public domain: Ode to Joy, Twinkle Twinkle Little Star, Frère Jacques, plus an introductory exercise. |
 | Score rendering | Custom QPainter drawing with the Bravura SMuFL music font (SIL Open Font License). |
 | Octave display | Written one octave below sounding pitch; note names show the sounding octave. |
-| Listen tone | Synthesized whistle-like tone generated in the app. |
+| Listen tone | Selectable: a synthesized whistle-like tone generated in the app, or recorded grand piano samples (Salamander Grand Piano, CC BY 3.0). |
 | Window layout | One window with switchable pages. |
 | UI language | English only; all user-facing strings kept in one module. |
 | Platform and install | Ubuntu 24.04 with PipeWire as the reference system; run from source via a setup script and desktop launcher. |
@@ -63,10 +63,12 @@ whistle_trainer/
   resources/
     songs/*.musicxml
     fonts/Bravura.otf, fonts/OFL.txt   Music font and its license
+    sounds/piano/*.wav, sounds/piano/CREDITS.txt   Piano samples and their license
 tests/
 scripts/
   setup.sh               Creates .venv and installs dependencies
   install-desktop.sh     Installs a .desktop launcher for the current user
+  make_piano_samples.py  Converts the Salamander samples into the bundled WAV files
 run.sh                   Starts the app from the project's .venv
 requirements.txt         Pinned dependency versions
 requirements-dev.txt     Adds test tools
@@ -256,13 +258,17 @@ The count-in starts `COUNT_IN_LEAD_S` (0.5 s) after the latest frame received wh
 
 ### Reference playback and self-hearing protection
 
-Hear target note plays a 1-second whistle tone of the current note. While capture is running, frames up to 300 ms after the tone ends (on the capture clock) are discarded, the detected-note display is cleared, and unfinished progress is reset when the tone starts, so the app's own sound can never complete a note. In guided mode it is available at any time during practice. In rhythm mode it is only available while stopped (paused, or after a failure), and the next count-in waits for Retry. The metronome is excluded from this protection.
+Hear target note plays the current note for 1 second in the chosen sound (whistle or piano). While capture is running, frames up to 300 ms after the tone ends (on the capture clock) are discarded, the detected-note display is cleared, and unfinished progress is reset when the tone starts, so the app's own sound can never complete a note. In guided mode it is available at any time during practice. In rhythm mode it is only available while stopped (paused, or after a failure), and the next count-in waits for Retry. The metronome is excluded from this protection.
 
 The metronome click is short (20 ms) and broadband, so it is classified as `UNCLEAR` or `QUIET` rather than accepted; the product specification recommends headphones for it. This is covered by a test with the click mixed into a synthetic whistle.
 
 ## Sound output
 
-### Whistle synthesis
+### Sounds
+
+The Listen page offers a **Sound** choice, Whistle or Piano, saved in the settings (`listen_sound`, default Whistle) and also used by Hear target note. Every note is rendered for exactly its duration, so consecutive notes never overlap. `audio/sounds.py` renders a note in the chosen sound.
+
+#### Whistle
 
 Each note is rendered on demand at 48 kHz:
 
@@ -271,6 +277,15 @@ Each note is rendered on demand at 48 kHz:
 - Envelope: 15 ms attack, 40 ms release; tied notes are one sound.
 - Breath noise at −35 dB, kept in a narrow band around the fundamental: white noise smoothed to a few hundred hertz of bandwidth, then ring-modulated by the tone. Seeded per note, so a note sounds the same each time.
 - Output at a fixed level of −12 dBFS peak.
+
+#### Piano
+
+Recorded samples of a Yamaha C5 grand from the Salamander Grand Piano V3 by Alexander Holm (CC BY 3.0), velocity layer 10 of 16:
+
+- 15 samples, one every minor third from C4 to F♯7 (MIDI 60 to 102), stored as 4-second mono 16-bit 48 kHz WAV files named by MIDI note (about 5.6 MB). Each note uses the nearest sample, shifted by at most one semitone by resampling, which covers B3 to G7: every bundled song at any transposition.
+- `scripts/make_piano_samples.py` produces them from the original FLAC files: mixed to mono, trimmed to the hammer strike, retuned to exact equal-tempered pitch (the recording follows a piano's stretched tuning, up to 24 cents sharp at the top, but whistling is graded against exact pitch), cut to 4 seconds with a 1-second fade-out, and normalized to −6 dBFS peak. It needs `soundfile`, which the app does not use; the app reads the WAV files with the standard library.
+- A note ends like a released key: the sample is cut at the note's duration with a 60 ms fade-out. Notes longer than 4 seconds let the sample die away.
+- The credit and license are bundled in `resources/sounds/piano/CREDITS.txt`, mentioned in the README, and shown on the Listen page while Piano is selected.
 
 The metronome click is a 20 ms decaying burst at 2 kHz for beat one and 1.5 kHz for other beats.
 
@@ -297,7 +312,7 @@ A single `QMainWindow` with a `QStackedWidget`:
 | Library | Song list with length, range, and progress in the selected mode ("—", "12 of 42 notes", "✓ Completed", "✓ Completed 3×"); Show note names; Reset all data (with confirmation). Preparation panel: mode (Guided or Rhythm, with a one-line description), metronome sound option (rhythm mode, saved globally), tempo, difficulty, transposition with the transposed range and, if a range was measured, a suggestion with Use; estimated length; Start practice; Continue from note n (when saved progress has an unfinished note); Listen; Reset progress (with confirmation); Audio setup. The introductory exercise is listed first. |
 | Audio setup | Input and output selectors, live level meter, detected note, step-by-step calibration with status text, Measure my range, and Test input. |
 | Test input | Whistle one selectable target note (C5 to C7, default the middle of the measured range, else B5) with the detected note, pitch meter, hold indicator for a 1-second hold, guidance text, and Try again. Uses the guided-mode hold rules. **Random note** replaces the chosen target with a random one from the measured comfortable range (or D5 to E6, the range of the bundled songs, if none was measured), never the same note twice in a row; 1.5 seconds after a note is hit, the next random note appears, and a counter shows how many notes were hit. |
-| Listen | Score view (clickable), the highlighted note with its length in beats, Previous note, Play song/Stop, Next note, Practice from here, tempo, and transposition. |
+| Listen | Score view (clickable), the highlighted note with its length in beats, Previous note, Play song/Stop, Next note, Practice from here, tempo, transposition, and Sound (Whistle or Piano, with the piano credit shown while Piano is selected). |
 | Practice | Song title as page title, "Note n of m", score view, target note and octave (or "Rest"), detected note, pitch meter, hold indicator ("Hold" or "Quiet"; in rhythm mode against the 80 percent requirement), guidance ("Get ready… n" during the count-in, "Whistle G5 now" in rhythm mode), beat indicator (rhythm), and controls: Pause/Resume and Restart song; Retry after a rhythm failure; Audio setup when the input is missing or lost; Hear note; Restart section when a section is chosen. While paused, a panel offers mode, tempo, difficulty, and transposition, and the score becomes clickable: click sets the start, Shift+click sets the end of a section (shaded on the score), and Clear section returns to the whole song. Changes keep the current position and discard unfinished progress. Listening starts when practice is started; returning to the page (for example from Audio setup) stays paused until Resume. Finishing opens the summary. |
 | Summary | "Song complete!" or "Section complete!", a note when every note of the song is now completed in the mode, mode, what was practiced (whole song, "Measure 5", "Measures 3–4", or "From measure 5 to the end"), active practice time, retries, the three notes with the most retries, and buttons: Practice measure n again (the measure with the most retries, if any), Repeat (same section or song), Restart song (whole song), and Library. Back returns to the library. |
 
@@ -329,7 +344,7 @@ Space: Play/Stop in Listen, Pause/Resume in Practice. Left and Right arrows: Pre
 
 Files are stored using XDG directories through `platformdirs`:
 
-- `~/.config/whistle-trainer/settings.json`: devices, calibration per input, notation preference, and last used mode, difficulty, and transposition per song. Tempo is kept in memory only: selecting a song in the library resets it to the song's own tempo, and it is shared by Listen and Practice until another song is selected.
+- `~/.config/whistle-trainer/settings.json`: devices, calibration per input, notation preference, sound for Listen and Hear note, and last used mode, difficulty, and transposition per song. Tempo is kept in memory only: selecting a song in the library resets it to the song's own tempo, and it is shared by Listen and Practice until another song is selected.
 - `~/.local/share/whistle-trainer/progress.json`: per song id and mode: completed event indices, next unfinished event index, retry counts per event, active practice time, and completion records with dates.
 
 Progress is updated after every batch of frames and saved on pause, input loss, leaving the practice page, finishing, and closing the app:
