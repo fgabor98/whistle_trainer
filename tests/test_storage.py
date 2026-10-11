@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from whistle_trainer.config import Difficulty, Mode
+from whistle_trainer.config import Difficulty, Mode, Sound
 from whistle_trainer.storage import jsonfile
 from whistle_trainer.storage.progress import ProgressStore
 from whistle_trainer.storage.settings import Calibration, SettingsStore, SongPreferences
@@ -30,6 +30,7 @@ def test_settings_round_trip(settings_path):
     store = SettingsStore(settings_path)
     store.settings.input_device = "USB Microphone"
     store.settings.show_note_names = False
+    store.settings.listen_sound = Sound.PIANO
     store.settings.calibrations["USB Microphone"] = Calibration(-60.0, -20.0, -40.0, 76, 88)
     prefs = store.settings.preferences_for("ode-to-joy", default_tempo=72)
     assert prefs.tempo == 72
@@ -56,6 +57,7 @@ def test_settings_round_trip(settings_path):
     json.dumps({"schema_version": 1, "song_preferences": {"x": {"mode": "freestyle"}}}),
     json.dumps({"schema_version": 1, "calibrations": {"mic": {"noise_floor_db": -60}}}),
     json.dumps({"schema_version": 1, "song_preferences": {"x": {"transposition": True}}}),
+    json.dumps({"schema_version": 1, "listen_sound": "kazoo"}),
 ])
 def test_unreadable_settings_are_kept_aside_and_reset(settings_path, content):
     settings_path.parent.mkdir(parents=True)

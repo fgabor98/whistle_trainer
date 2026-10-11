@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence
@@ -7,7 +8,8 @@ from fakes import BUILTIN, MIC, SPEAKERS, FakeAudio, FakeClock, FakeDevices, Fak
 from whistle_trainer import config, strings
 from whistle_trainer.app import MainWindow
 from whistle_trainer.audio.capture import InputProblem
-from whistle_trainer.config import Difficulty, Mode
+from whistle_trainer.config import Difficulty, Mode, Sound
+from whistle_trainer.audio.sounds import piano
 from whistle_trainer.assessment.rhythm import RhythmStatus
 from whistle_trainer.music.library import load_songs
 from whistle_trainer.storage.progress import ProgressStore
@@ -837,3 +839,26 @@ def test_turning_random_off_restores_chosen_targets(window, settings):
     page.random_check.setChecked(False)
     assert page.target_combo.isEnabled() and not page.hits_label.isVisibleTo(page)
     assert page.try_again_button.text() == strings.TEST_TRY_AGAIN
+
+
+# Piano sound
+
+def test_listen_sound_choice_is_saved_and_credited(window, playback, settings):
+    window.start_listening("introductory-exercise")
+    listen = window.listen_page
+    assert listen.sound_combo.currentData() == Sound.WHISTLE
+    assert not listen.credit_label.isVisibleTo(listen)
+    listen.sound_combo.setCurrentIndex(listen.sound_combo.findData(Sound.PIANO))
+    assert settings.settings.listen_sound is Sound.PIANO and settings.path.exists()
+    assert listen.credit_label.isVisibleTo(listen)
+    listen.play_note(0)  # G5, four beats at 60 bpm
+    _, samples = playback.scheduled[-1]
+    assert np.array_equal(samples, piano(listen.song.events[0].pitch.frequency(), 4.0, playback.rate))
+
+
+def test_hear_note_uses_the_chosen_sound(window, audio, playback, settings):
+    settings.settings.listen_sound = Sound.PIANO
+    page = start_intro(window, settings)
+    page.hear_button.click()
+    _, samples = playback.scheduled[-1]
+    assert np.array_equal(samples, piano(page.event.pitch.frequency(), config.REFERENCE_NOTE_S, playback.rate))
