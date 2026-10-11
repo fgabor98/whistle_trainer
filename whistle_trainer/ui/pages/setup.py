@@ -18,7 +18,7 @@ from whistle_trainer import config, strings
 from whistle_trainer.audio.capture import InputProblem
 from whistle_trainer.audio.devices import DeviceInfo
 from whistle_trainer.music.transpose import spell_midi
-from whistle_trainer.pitch.calibration import LevelCalibration, LevelStep, RangeMeasurement, SetupProblem
+from whistle_trainer.pitch.calibration import LevelCalibration, LevelStep, Pause, RangeMeasurement, SetupProblem
 from whistle_trainer.pitch.display import NoteDisplay
 from whistle_trainer.storage.settings import Calibration, SettingsStore
 from whistle_trainer.ui.meters import LevelMeter
@@ -57,6 +57,7 @@ class SetupPage(QWidget):
         self.display = NoteDisplay()
         self.calibration: LevelCalibration | None = None
         self.range_low: RangeMeasurement | None = None
+        self.range_pause: Pause | None = None
         self.range_high: RangeMeasurement | None = None
         self.message: str | None = None
 
@@ -211,7 +212,7 @@ class SetupPage(QWidget):
         return self.calibration is not None or self.range_low is not None
 
     def _cancel_measurements(self) -> None:
-        self.calibration = self.range_low = self.range_high = None
+        self.calibration = self.range_low = self.range_pause = self.range_high = None
         self.progress.hide()
 
     def _on_frames(self, frames: list) -> None:
@@ -225,12 +226,15 @@ class SetupPage(QWidget):
             elif self.range_high is not None:
                 if self.range_high.feed(frame):
                     self._finish_range()
+            elif self.range_pause is not None:
+                if self.range_pause.feed(frame):
+                    self.range_high = RangeMeasurement(self.audio.hop_seconds)
             elif self.range_low is not None:
                 if self.range_low.feed(frame):
                     if self.range_low.midi is None:
                         self._finish_range()
                     else:
-                        self.range_high = RangeMeasurement(self.audio.hop_seconds)
+                        self.range_pause = Pause(config.SETUP_RANGE_PAUSE_S)
         self.level_meter.set_level(frames[-1].level_db)
         self.detected_label.setText(describe_detected(self.display))
         self._update()
@@ -264,7 +268,7 @@ class SetupPage(QWidget):
     def _finish_range(self) -> None:
         low = self.range_low.midi if self.range_low else None
         high = self.range_high.midi if self.range_high else None
-        self.range_low = self.range_high = None
+        self.range_low = self.range_pause = self.range_high = None
         calibration = self._saved_calibration()
         if low is None or high is None or high <= low or calibration is None:
             self.message = strings.SETUP_RANGE_FAILED
@@ -282,6 +286,8 @@ class SetupPage(QWidget):
             return strings.SETUP_STEP_WHISTLE
         if self.range_high is not None:
             return strings.SETUP_RANGE_HIGH
+        if self.range_pause is not None:
+            return strings.SETUP_RANGE_PAUSE.format(low=spell_midi(self.range_low.midi).name)
         if self.range_low is not None:
             return strings.SETUP_RANGE_LOW
         if self.message is not None:
@@ -307,7 +313,7 @@ class SetupPage(QWidget):
         self.status_label.setText(self._status_text())
         measuring = self.measuring()
         if measuring:
-            measurement = self.calibration or self.range_high or self.range_low
+            measurement = self.calibration or self.range_high or self.range_pause or self.range_low
             self.progress.setValue(round(measurement.progress() * 1000))
         self.progress.setVisible(measuring)
         available = self.selected_input() is not None

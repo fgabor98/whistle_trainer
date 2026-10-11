@@ -23,7 +23,7 @@ Accompaniment, lyrics, harmony, automatic transcription, arbitrary score imports
 
 ## Setup and practice flow
 
-1. **Set up audio:** Select an input, check its activity meter, then stay quiet and whistle a steady note to establish useful input levels. Optionally try comfortable low and high notes to suggest a practice range. If input is unusable, suggest checking the device, distance, or volume.
+1. **Set up audio:** Select an input, check its activity meter, then stay quiet and whistle a steady note to establish useful input levels. Optionally try comfortable low and high notes to suggest a practice range: each note is held for a few seconds, with a short pause after the low note before the high note is measured. If input is unusable, suggest checking the device, distance, or volume.
 2. **Choose a song:** Review its length, pitch range, and saved progress. Select mode, tempo, difficulty, and transposition; optionally open Listen mode to hear the melody. Duration estimates use the selected tempo and exclude waiting and retries.
 3. **Practice:** Follow the highlighted note, pitch guidance, and hold indicator. Guided mode waits for each attempt. Rhythm mode starts with a count-in and follows the beat until a mistake requires a retry.
 4. **Finish or return later:** Stop listening, show a summary, and offer Repeat, Restart, or Library. Reopening the app offers saved progress with capture off until practice starts.
@@ -33,7 +33,7 @@ Accompaniment, lyrics, harmony, automatic transcription, arbitrary score imports
 | Screen | Main content and actions |
 | --- | --- |
 | Song library and preparation | Song title, length, range, progress, introductory exercise, mode, tempo, difficulty, transposition, preview, Start, and Audio setup. |
-| Audio setup | Input selector, activity meter, reliable detected note, setup status, Test input, and Repeat setup. Identify unavailable devices without silently switching inputs. |
+| Audio setup | Input selector, activity meter, reliable detected note, setup status, Test input, and Repeat setup. Identify unavailable devices without silently switching inputs. Test input offers a chosen target note, or random target notes that change to a new one each time the current one is hit. |
 | Listen | Score with the playing note highlighted, Play song, Stop, Previous note, Next note, tempo, transposition, and Practice. Capture is off. |
 | Practice | Score with current and upcoming notes, target name and octave, reliable detected note, pitch direction, hold progress, selected input, and listening status. Rhythm mode adds visual beats and a count-in. |
 | Summary | Mode, completed song or section, active practice time, notes needing the most retries, and replay options. |
@@ -98,7 +98,7 @@ The target note name and octave are shown for the highlighted note. Starting pla
 | Setting | Starting value |
 | --- | --- |
 | Mode and difficulty | Guided, Easy. |
-| Tempo | 60 beats per minute; adjustable from 30 to 120. |
+| Tempo | Each song's own tempo; adjustable from 30 to 120. Opening a song in Listen or Practice always starts at its own tempo; a changed tempo lasts only while that song stays selected. |
 | Pitch tolerance | Easy: ±40 cents; Standard: ±25 cents. A semitone is 100 cents. Confirmed as fair with a real whistle (October 2026). |
 | Stable pitch confirmation | 100 milliseconds, counted toward the hold. |
 | Interruption grace period | 100 milliseconds; progress freezes during the interruption. |
@@ -119,7 +119,7 @@ Input disconnection or denied permission pauses practice, explains the problem, 
 
 Changes to mode, tempo, difficulty, or transposition preserve the selected position and reset unfinished progress. Update score pitches and durations before resuming.
 
-Save input and setup settings, notation preference, mode, difficulty, tempo, transposition, and progress per song and mode. Track completed events and the next unfinished event. Switching modes can carry the selected position over, but does not mark earlier events as practiced in the new mode or compare retry counts between modes.
+Save input and setup settings, notation preference, mode, difficulty, transposition, and progress per song and mode. Tempo is not saved. Track completed events and the next unfinished event. Switching modes can carry the selected position over, but does not mark earlier events as practiced in the new mode or compare retry counts between modes.
 
 Mark a whole song complete only when every event has been completed in that mode. Section practice never marks unplayed events complete. Save completion records and offer a reset for individual songs.
 

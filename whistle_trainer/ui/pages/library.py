@@ -232,6 +232,9 @@ class LibraryPage(QWidget):
 
     def _on_current_changed(self, current: QTreeWidgetItem | None, _previous) -> None:
         self.song = self.library.get(current.data(0, Qt.ItemDataRole.UserRole)) if current else None
+        if self.song is not None:
+            # Every song starts at its own tempo; a changed tempo lasts while it stays selected.
+            self.preferences().tempo = self.song.tempo
         self._update_panel()
         if self.song is not None:
             self.song_selected.emit(self.song.id)

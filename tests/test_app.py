@@ -126,9 +126,21 @@ def test_setup_range_measurement(window, audio, settings):
     page = window.setup_page
     page.range_button.click()
     assert page.status_label.text() == strings.SETUP_RANGE_LOW
-    audio.send(FrameScript().pitched(587.33, 1.0).frames)  # D5
+    script = FrameScript().pitched(587.33, 1.9)  # D5
+    audio.send(script.frames)
+    assert page.status_label.text() == strings.SETUP_RANGE_LOW  # two seconds are needed
+    audio.send(script.pitched(587.33, 0.1).frames[-10:])
+    assert page.status_label.text() == strings.SETUP_RANGE_PAUSE.format(low="D5")
+    pause = FrameScript()
+    pause.time = script.time
+    audio.send(pause.pitched(2000.0, 2.9).frames)  # whistling during the pause is ignored
+    assert page.status_label.text() == strings.SETUP_RANGE_PAUSE.format(low="D5")
+    assert page.progress.value() == pytest.approx(2.9 / 3.0 * 1000, abs=10)
+    audio.send(pause.quiet(0.2).frames[-20:])
     assert page.status_label.text() == strings.SETUP_RANGE_HIGH
-    audio.send(FrameScript().pitched(1760.0, 1.0).frames)  # A6
+    high = FrameScript()
+    high.time = pause.time
+    audio.send(high.pitched(1760.0, 2.0).frames)  # A6
     calibration = settings.settings.calibrations[BUILTIN.id]
     assert (calibration.practice_low_midi, calibration.practice_high_midi) == (74, 93)
     assert page.status_label.text() == strings.SETUP_RANGE_DONE.format(low="D5", high="A6")
@@ -233,21 +245,36 @@ def start_intro(window, settings, tempo=120):
     return window.practice_page
 
 
-def test_preparation_panel_saves_preferences(window, settings):
+def test_preparation_panel_saves_preferences_but_not_tempo(window, settings):
     page = window.library_page
     page.select_song("ode-to-joy")
     assert page.song_title.text() == "Ode to Joy"
-    assert page.tempo_spin.value() == 60
-    assert page.estimate_label.text() == strings.LIBRARY_ESTIMATE.format(length="1:04")
-    page.tempo_spin.setValue(120)
+    assert page.tempo_spin.value() == 100  # the song's own tempo
+    assert page.estimate_label.text() == strings.LIBRARY_ESTIMATE.format(length="0:38")
+    page.tempo_spin.setValue(50)
     page.difficulty_combo.setCurrentIndex(page.difficulty_combo.findData(Difficulty.STANDARD))
-    assert page.estimate_label.text() == strings.LIBRARY_ESTIMATE.format(length="0:32")
+    assert page.estimate_label.text() == strings.LIBRARY_ESTIMATE.format(length="1:17")
     prefs = settings.settings.song_preferences["ode-to-joy"]
-    assert (prefs.tempo, prefs.difficulty) == (120, Difficulty.STANDARD)
-    page.select_song("frere-jacques")
+    assert (prefs.tempo, prefs.difficulty) == (50, Difficulty.STANDARD)
+    page.select_song("introductory-exercise")
     assert page.tempo_spin.value() == 60
     page.select_song("ode-to-joy")
-    assert page.tempo_spin.value() == 120
+    assert page.tempo_spin.value() == 100  # back to the song's tempo
+    assert page.difficulty_combo.currentData() == Difficulty.STANDARD  # still remembered
+
+
+def test_changed_tempo_is_used_while_the_song_stays_selected(window, audio, settings):
+    calibrate(settings, MIC)
+    page = window.library_page
+    page.select_song("frere-jacques")
+    page.tempo_spin.setValue(70)
+    page.listen_button.click()
+    assert window.listen_page.tempo_spin.value() == 70
+    window.listen_page.tempo_spin.setValue(80)
+    window.listen_page.practice_button.click()
+    assert window.practice_page.preferences.tempo == 80
+    window.back_button.click()
+    assert page.tempo_spin.value() == 80
 
 
 def test_start_without_setup_explains(window, audio):
@@ -754,3 +781,59 @@ def test_escape_returns_to_library(window, audio, settings):
     assert window.escape_shortcut.key() == QKeySequence(Qt.Key.Key_Escape)
     window.escape_shortcut.activated.emit()
     assert window.pages.currentWidget() is window.library_page and not audio.running
+
+
+# Test input: random notes
+
+def hz(midi: int) -> float:
+    return 440.0 * 2 ** ((midi - 69) / 12)
+
+
+def test_random_notes_move_on_after_each_hit(window, audio, settings):
+    calibrate(settings, MIC)
+    window.show_page(window.test_input_page)
+    page = window.test_input_page
+    page.random_check.setChecked(True)
+    assert not page.target_combo.isEnabled() and page.hits_label.isVisibleTo(page)
+    assert page.try_again_button.text() == strings.TEST_NEW_NOTE
+    assert page.hits_label.text() == strings.TEST_HITS.format(count=0)
+
+    targets = []
+    script = FrameScript()
+    for expected_hits in (1, 2, 3):
+        target = page.target_combo.currentData()
+        targets.append(target)
+        low, high = config.TEST_RANDOM_DEFAULT_RANGE
+        assert low <= target <= high
+        audio.send(script.pitched(hz(target), 1.0).frames[-100:])
+        assert page.guide_label.text() == strings.TEST_RANDOM_PASSED
+        assert page.hits_label.text() == strings.TEST_HITS.format(count=expected_hits)
+        audio.send(script.quiet(1.4).frames[-140:])
+        assert page.target_combo.currentData() == target  # still showing the hit
+        audio.send(script.quiet(0.2).frames[-20:])
+        assert page.target_combo.currentData() != target  # a new note
+        assert page.hold.progress == 0
+    assert all(a != b for a, b in zip(targets, targets[1:]))
+
+
+def test_random_notes_use_measured_range_and_never_repeat(window, settings):
+    calibrate(settings, MIC, low=79, high=81)  # G5 to A5: three notes
+    window.show_page(window.test_input_page)
+    page = window.test_input_page
+    page.random_check.setChecked(True)
+    seen = [page.target_combo.currentData()]
+    for _ in range(30):
+        page.try_again_button.click()  # New note
+        seen.append(page.target_combo.currentData())
+    assert set(seen) <= {79, 80, 81}
+    assert all(a != b for a, b in zip(seen, seen[1:]))
+
+
+def test_turning_random_off_restores_chosen_targets(window, settings):
+    calibrate(settings, MIC)
+    window.show_page(window.test_input_page)
+    page = window.test_input_page
+    page.random_check.setChecked(True)
+    page.random_check.setChecked(False)
+    assert page.target_combo.isEnabled() and not page.hits_label.isVisibleTo(page)
+    assert page.try_again_button.text() == strings.TEST_TRY_AGAIN

@@ -14,8 +14,8 @@
         <transpose><diatonic>0</diatonic><chromatic>0</chromatic><octave-change>1</octave-change></transpose>
       </attributes>
       <direction placement="above">
-        <direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>60</per-minute></metronome></direction-type>
-        <sound tempo="60"/>
+        <direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>100</per-minute></metronome></direction-type>
+        <sound tempo="100"/>
       </direction>
       <note>
         <pitch><step>G</step><octave>4</octave></pitch>

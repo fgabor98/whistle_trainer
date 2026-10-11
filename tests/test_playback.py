@@ -48,3 +48,37 @@ def test_whistle_tone_is_detected_at_its_pitch():
     assert len(frames) > 80
     cents = [1200 * np.log2(f.f0_hz / 987.77) for f in frames]
     assert max(abs(c) for c in cents) < 12  # vibrato of ±8 cents
+
+
+class _Device:
+    def __init__(self, supports_stereo: bool):
+        self.supports_stereo = supports_stereo
+
+    def isFormatSupported(self, audio_format) -> bool:
+        return self.supports_stereo
+
+    def preferredFormat(self):
+        preferred = QAudioFormat()
+        preferred.setSampleRate(44100)
+        preferred.setChannelCount(1)
+        preferred.setSampleFormat(QAudioFormat.SampleFormat.Int16)
+        return preferred
+
+
+def test_output_is_stereo_so_both_speakers_play():
+    from whistle_trainer.audio.playback import choose_output_format
+
+    audio_format = choose_output_format(_Device(supports_stereo=True))
+    assert audio_format.channelCount() == 2
+    assert audio_format.channelConfig() == QAudioFormat.ChannelConfig.ChannelConfigStereo
+    assert audio_format.sampleRate() == 48000
+    # Every sample goes to both channels.
+    data = np.frombuffer(encode(np.array([0.25, -0.5], np.float32), audio_format.sampleFormat(), 2), np.float32)
+    assert data.tolist() == [0.25, 0.25, -0.5, -0.5]
+
+
+def test_output_falls_back_to_preferred_format():
+    from whistle_trainer.audio.playback import choose_output_format
+
+    audio_format = choose_output_format(_Device(supports_stereo=False))
+    assert (audio_format.channelCount(), audio_format.sampleRate()) == (1, 44100)

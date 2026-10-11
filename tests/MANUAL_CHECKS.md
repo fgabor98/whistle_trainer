@@ -10,7 +10,7 @@ Checks that need a real microphone and a real whistle. Run them on the reference
 2. Make a sound: the activity meter moves.
 3. Press **Start setup**, stay quiet for 3 seconds, then whistle one steady note. Setup completes and shows the background level, whistle level, and threshold.
 4. Press **Start setup** and stay silent through both steps: after 10 seconds, the "No steady whistle" message appears.
-5. Press **Measure my range** and whistle your lowest and then your highest comfortable note. The range is shown.
+5. Press **Measure my range** and hold your lowest comfortable note for two seconds. A 3-second pause follows, showing the low note, before the high note is asked for; whistling during the pause is ignored. Then hold your highest comfortable note for two seconds. The range is shown.
 6. Go **Back**: the Listening indicator disappears.
 
 ### Devices
@@ -27,7 +27,8 @@ Checks that need a real microphone and a real whistle. Run them on the reference
 13. Whistle the target an octave higher or lower: it never passes.
 14. Break off briefly (a quick breath) while holding: the bar pauses ("Keep going"). Stop for longer: the bar resets.
 15. Talk, clap, and hum near the microphone: no note passes.
-16. Note how quickly the detected note and meter react. They should feel immediate, with a delay of no more than about 150 ms.
+16. Tick **Random note**: a random target appears; hit it and a different one follows after about 1.5 seconds, and **Notes hit** counts up. **New note** skips to another note. The targets stay within your measured range.
+17. Note how quickly the detected note and meter react. They should feel immediate, with a delay of no more than about 150 ms.
 
 ### Measurements to record
 
@@ -39,7 +40,7 @@ Checks that need a real microphone and a real whistle. Run them on the reference
 
 ## Milestone 3: guided practice
 
-1. In the library, select a song, change its tempo and difficulty, and restart the app: the choices are remembered per song. The estimated length changes with the tempo.
+1. In the library, select a song, change its tempo and difficulty, and restart the app: the difficulty is remembered per song, and the tempo is back at the song's own tempo (60 for the exercise, 90 for Twinkle, 100 for Ode to Joy and Frère Jacques). The estimated length changes with the tempo. A changed tempo is kept when going from Listen to Practice and back to the library, until another song is selected.
 2. Press **Start practice** without setting up the microphone: the page explains this and offers **Audio setup…**.
 3. Practice the **Introductory exercise** at 60 bpm. The score scrolls smoothly and keeps the current note highlighted; completed notes get a check mark.
 4. Whistle each note for its written length: whole notes need 4 seconds, half notes 2, quarter notes 1 at 60 bpm.

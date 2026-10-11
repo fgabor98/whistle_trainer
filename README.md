@@ -36,29 +36,29 @@ Press **Audio setup…** in the library.
 
 1. Choose your microphone under **Input**. The app lists your PipeWire/PulseAudio devices by name and marks the system default. The **Activity** meter shows that sound is coming in. Choose where the app's sounds play under **Output**.
 2. Press **Start setup**. Stay quiet for about 3 seconds while the background is measured, then whistle one steady, comfortable note until setup completes. The app shows the measured levels and saves them for this microphone.
-3. Optionally press **Measure my range**, then whistle your lowest and highest comfortable notes. The library then suggests a transposition for each song so that it fits your range.
+3. Optionally press **Measure my range**, then whistle your lowest comfortable note and hold it for two seconds. After a short pause to take a breath, do the same with your highest comfortable note. You have up to 15 seconds for each, so you can feel your way down or up to it. The library then suggests a transposition for each song so that it fits your range.
 
 If setup reports a problem, follow its suggestion (whistle closer, raise the input volume, or reduce background noise) and press **Repeat setup**. Repeat setup when you change rooms or microphones.
 
 The app never switches microphones on its own. If your microphone is unplugged, it says so and stops listening until you choose an input again. A **● Listening** indicator in the top right corner shows whenever the microphone is in use: only on the Audio setup, Test input, and practice pages.
 
-**Test input** lets you try a single note: pick a target and a difficulty, and whistle until the bar fills (1 second).
+**Test input** lets you try a single note: pick a target and a difficulty, and whistle until the bar fills (1 second). Tick **Random note** for ear and pitch training: the app picks a random note from your comfortable range (or D5–E6 if you have not measured it), and each time you hit it, a new one appears after a moment. **New note** skips to another one, and the counter shows how many notes you have hit.
 
 ### 2. Choose a song
 
-The library lists the songs with their length at the default tempo, their range, and your progress in the selected mode ("12 of 42 notes", "✓ Completed").
+The library lists the songs with their length at their own tempo, their range, and your progress in the selected mode ("12 of 42 notes", "✓ Completed").
 
-| Song | Range | Length |
-| --- | --- | --- |
-| Introductory exercise | G5–B5 | 0:28 |
-| Frère Jacques | D5–E6 | 0:32 |
-| Ode to Joy | D5–D6 | 1:04 |
-| Twinkle Twinkle Little Star | G5–E6 | 0:48 |
+| Song | Range | Tempo | Length |
+| --- | --- | --- | --- |
+| Introductory exercise | G5–B5 | 60 bpm | 0:28 |
+| Frère Jacques | D5–E6 | 100 bpm | 0:19 |
+| Ode to Joy | D5–D6 | 100 bpm | 0:38 |
+| Twinkle Twinkle Little Star | G5–E6 | 90 bpm | 0:32 |
 
-Select a song to prepare it in the panel on the right. Everything is remembered for each song:
+Select a song to prepare it in the panel on the right. Mode, difficulty, and transposition are remembered for each song:
 
 - **Mode:** **Guided** waits for you at every note; **Rhythm** keeps the beat after a count-in.
-- **Tempo:** 30 to 120 beats per minute. At a slower tempo every note must be held longer.
+- **Tempo:** 30 to 120 beats per minute. Each song starts at its own tempo every time you select it; a slower tempo makes every note last longer. A changed tempo is used for Listen and Practice until you select another song or restart the app.
 - **Difficulty:** **Easy** accepts notes within ±40 cents of the target, **Standard** within ±25 cents (a semitone is 100 cents).
 - **Transposition:** moves the whole song up or down by semitones. If you measured your range, the panel suggests a transposition; press **Use** to apply it.
 
