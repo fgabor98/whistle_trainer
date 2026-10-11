@@ -54,6 +54,19 @@ def output_index(at: float, now: float, processed: int, written: int, rate: int)
     return max(written, processed + round((at - now) * rate))
 
 
+def choose_output_format(device) -> QAudioFormat:
+    """Stereo float at 48 kHz, or the device's preferred format if that is not supported.
+
+    The app's sounds are mono but are written to every channel. A one-channel stream
+    has no channel layout in Qt, and PipeWire then plays it on the left speaker only.
+    """
+    audio_format = QAudioFormat()
+    audio_format.setSampleRate(config.SAMPLE_RATE)
+    audio_format.setChannelConfig(QAudioFormat.ChannelConfig.ChannelConfigStereo)
+    audio_format.setSampleFormat(QAudioFormat.SampleFormat.Float)
+    return audio_format if device.isFormatSupported(audio_format) else device.preferredFormat()
+
+
 def encode(samples: np.ndarray, sample_format: QAudioFormat.SampleFormat, channels: int) -> bytes:
     dtype, scale = _OUTPUT_TYPES[sample_format]
     data = samples if dtype is np.float32 else np.round(samples * scale)
@@ -87,12 +100,7 @@ class Playback(QObject):
             else QMediaDevices.defaultAudioOutput()
         if qt_device.isNull():
             return False
-        audio_format = QAudioFormat()
-        audio_format.setSampleRate(config.SAMPLE_RATE)
-        audio_format.setChannelCount(1)
-        audio_format.setSampleFormat(QAudioFormat.SampleFormat.Float)
-        if not qt_device.isFormatSupported(audio_format):
-            audio_format = qt_device.preferredFormat()
+        audio_format = choose_output_format(qt_device)
         if audio_format.sampleFormat() not in _OUTPUT_TYPES:
             return False
         self._format = audio_format
