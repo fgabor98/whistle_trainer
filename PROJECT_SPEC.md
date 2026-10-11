@@ -19,7 +19,7 @@ Everything else below is proposed for review. Numeric defaults need validation w
 
 The first version is a local, single-user app that works offline after installation, requires no account or development tools, and saves settings and progress. It includes three short, recognizable melody arrangements and an introductory exercise. Each arrangement has one melodic line suitable for whistling.
 
-Accompaniment, lyrics, harmony, automatic transcription, arbitrary score imports, and a song editor are outside the initial scope. Audio inputs are those available through the supported OS; capturing arbitrary applications is not assumed.
+Accompaniment, lyrics, harmony, automatic transcription from audio or PDF, and a song editor are outside the scope. Users can add their own songs by importing a MusicXML score, from which the app extracts a whistle melody (see Adding your own songs). Audio inputs are those available through the supported OS; capturing arbitrary applications is not assumed.
 
 ## Setup and practice flow
 
@@ -32,7 +32,8 @@ Accompaniment, lyrics, harmony, automatic transcription, arbitrary score imports
 
 | Screen | Main content and actions |
 | --- | --- |
-| Song library and preparation | Song title, length, range, progress, introductory exercise, mode, tempo, difficulty, transposition, preview, Start, and Audio setup. |
+| Song library and preparation | Song title, length, range, progress, introductory exercise, mode, tempo, difficulty, transposition, preview, Start, Audio setup, Add song, and Remove song for added songs. |
+| Add song | Chosen file, title, the melody line used and the others available, what was simplified, Play preview, and Add. |
 | Audio setup | Input selector, activity meter, reliable detected note, setup status, Test input, and Repeat setup. Identify unavailable devices without silently switching inputs. Test input offers a chosen target note, or random target notes that change to a new one each time the current one is hit. |
 | Listen | Score with the playing note highlighted, Play song, Stop, Previous note, Next note, tempo, transposition, sound (Whistle or Piano), and Practice. Capture is off. |
 | Practice | Score with current and upcoming notes, target name and octave, reliable detected note, pitch direction, hold progress, selected input, and listening status. Rhythm mode adds visual beats and a count-in. |
@@ -92,6 +93,18 @@ Listen mode plays the loaded song from the computer so users can learn how it sh
 - **Note by note:** Next note and Previous note move the highlight and play that single note for its written duration at the selected tempo; tied notes play as one sound. Selecting a note on the score plays it and makes it the current position. Rests are highlighted silently with “Rest” and its duration shown.
 
 The target note name and octave are shown for the highlighted note. Starting playback in either way stops any playback already in progress. Practice switches to the chosen practice mode at the highlighted note, with capture off until the user starts.
+
+## Adding your own songs
+
+Users can add a song they have a score of, for example a piano arrangement exported from MuseScore or converted from a PDF by a recognition tool. Converting PDFs is not part of the app. **Add song** in the library opens a MusicXML file (`.musicxml`, `.xml`, or compressed `.mxl`) and turns it into a single whistle melody:
+
+- **Melody line:** if the score has a separate vocal or melody part or staff, that is used; otherwise the top notes of the upper (right-hand) staff. Where several notes start together, the highest one is the melody, and accompaniment notes under a held melody note are left out. The dialog lists the other staves, so a wrong guess can be corrected and previewed.
+- **Simplified away:** accompaniment, chords, inner voices, grace notes, ornaments, dynamics, and lyrics. Repeats, first and second endings, and jumps such as D.C., D.S., To Coda, and Fine are written out in full, so the song plays straight through.
+- **Kept:** pitches, rhythms including triplets, ties, rests, key and time signature changes, pickup measures, and the tempo marking.
+- **Range:** the melody is moved by whole octaves to sit as close as possible to the comfortable whistle range (D5 to E6); the transposition setting and the measured range can then fine-tune it.
+- **Rounding:** rhythms the app cannot show, such as quintuplets, are rounded to the nearest sixteenth-note triplet and reported.
+
+The dialog shows the title (editable), the melody line used with its note count and range, and a short report of what was simplified. **Play preview** plays the beginning of the melody, and **Add** saves it. Added songs are stored only on the user's computer, appear in the library like the bundled songs, and can be removed again (with confirmation); removing a song also removes its progress. A file the app cannot use at all, for example one without any notes, is reported with the reason.
 
 ## Proposed defaults
 

@@ -30,7 +30,8 @@ whistle_trainer/
   music/
     model.py             Song, Event, Pitch, TimeSignature, KeySignature
     musicxml.py          MusicXML subset parser and validation
-    library.py           Loading the bundled songs
+    library.py           Loading the bundled and added songs
+    importer.py          Melody extraction from arbitrary MusicXML scores (Add song)
     transpose.py         Transposition and enharmonic spelling
     timing.py            Beats to seconds, event schedule
   audio/
@@ -158,12 +159,13 @@ Calibration results are stored per input device id. Until an input is set up, an
 ### Model
 
 - `Pitch`: MIDI number for the sounding pitch, plus spelling (step, alter) for display.
-- `Event`: a note or rest with its index, sounding pitch (notes only), total duration in quarter notes as a `Fraction`, and its notated parts. A tied chain is one `Event` whose notated parts are the individual written notes, so it is assessed as one hold but drawn as written.
-- `Song`: id (file name without extension), title, key signature, time signature, default tempo, events, measures, sounding range, and length in beats.
+- `Event`: a note or rest with its index, sounding pitch (notes only), total duration in quarter notes as a `Fraction`, and its notated parts. A tied chain is one `Event` whose notated parts are the individual written notes, so it is assessed as one hold but drawn as written. A notated part may belong to a tuplet, given as (actual notes, normal notes), for example (3, 2) for a triplet; its duration is the written value × normal ÷ actual.
+- `Measure`: index, number, start, duration, and the key and time signature in effect in that measure.
+- `Song`: id (file name without extension, prefixed `user-` for added songs), title, key and time signature of the first measure, default tempo, events, measures, sounding range, length in beats, and whether it was added by the user.
 
 ### Timing
 
-`seconds = quarter_notes × 60 / tempo`, with tempo in quarter-note beats per minute. Event start times are cumulative sums of durations. The time signature only affects display and the metronome accent.
+`seconds = quarter_notes × 60 / tempo`, with tempo in quarter-note beats per minute. Event start times are cumulative sums of durations. The time signature only affects display, the metronome and visual beats, and measure validation. When it changes, beats follow the measure they fall in: a beat lasts that measure's beat unit, and beat one of each measure is accented.
 
 ### MusicXML subset
 
@@ -172,12 +174,13 @@ Supported:
 - `score-partwise` with exactly one part and one voice.
 - `work-title` or `movement-title` for the title.
 - `divisions`, `key`, `time`, `clef` (treble only), `transpose` (`chromatic` and `octave-change`).
-- `note` with `pitch` (step, alter, octave) or `rest`, `duration`, `type`, `dot`, `tie` (start/stop), and `measure` boundaries.
+- `note` with `pitch` (step, alter, octave) or `rest`, `duration`, `type`, `dot`, `tie` (start/stop), `time-modification` (tuplets: `actual-notes`, `normal-notes`), and `measure` boundaries.
+- `key` and `time` changes at the start of any measure. They take effect from that measure on; the time signature defines that measure's expected length.
 - `sound tempo` or `metronome` for the default tempo; 60 if missing.
 
 Sounding pitch = written pitch + `chromatic` + 12 × `octave-change`. Bundled songs are written an octave below sounding pitch with `octave-change` 1, matching the score display decision. Files without a `transpose` element are interpreted the same way, so that songs exported from MuseScore with a plain treble instrument also display correctly.
 
-Anything else that affects the melody (chords, multiple voices, staves or parts, grace notes, tuplets, microtones, repeats and jumps, key or time signature changes after the first measure) is rejected with a clear message naming the file and measure. Dynamics, lyrics, slurs, and layout elements are ignored. The parser validates that each measure's durations match the time signature. Only the first measure (a pickup) and the last measure may be shorter; no measure may be longer or empty. A whole-measure rest may omit its note type; for other notes without a type, the type is derived from the duration.
+Anything else that affects the melody (chords, multiple voices, staves or parts, grace notes, microtones, repeats and jumps, transposition changes after the first measure) is rejected with a clear message naming the file and measure. Dynamics, lyrics, slurs, and layout elements are ignored. The parser validates that each measure's durations match its time signature, and that a tuplet note's duration matches its type, dots, and time modification. Only the first measure (a pickup), the last measure, and measures marked `implicit="yes"` may be shorter; no measure may be longer or empty. A whole-measure rest may omit its note type; for other notes without a type, the type is derived from the duration.
 
 ### Bundled arrangements
 
@@ -197,6 +200,22 @@ The shortest note is an eighth: 0.3 seconds at 100 bpm. Users who find this too 
 - Range −12 to +12 semitones in half steps, default 0.
 - Transposing shifts every sounding pitch and the key signature. The new key is the one with the fewest accidentals for the transposed tonic (for example F♯ major rather than G♭ major, F major rather than E♯ major), and notes are spelled in that key.
 - The library suggests the transposition that best centers the song's range inside the user's measured practice range, if one was measured. It is shown as a suggestion only.
+
+### Song import
+
+`music/importer.py` turns an arbitrary MusicXML score into a file of the subset above. It is pure Python and never modifies the source file.
+
+1. **Reading:** `.musicxml` and `.xml` are read directly; `.mxl` is a zip whose `META-INF/container.xml` names the score. Only `score-partwise` is accepted. Every part, staff, and voice is read with `backup` and `forward`, chords, ties, tuplets, grace and cue notes, key, time, and transpose changes, tempo, repeats, endings, and jumps. Sounding pitch includes any `transpose` element of the source part.
+2. **Unrolling:** the measure order is expanded once, before anything else: forward and backward repeats (with `times`), numbered endings, and the jumps segno, coda, D.C., D.S., To Coda, and Fine, followed in the usual way (repeats are not taken again after a jump). A jump that cannot be resolved stops the import with a message naming the measure. Measures are renumbered from 1 in playing order.
+3. **Candidate lines:** one per part and staff, with the notes of all its voices, grace and cue notes removed, and tied notes merged. Each candidate reports its note count and sounding range. The default is the first part whose name suggests a melody (voice, vocal, vox, melody, lead, soprano, singer), or with lyrics, if the score has more than one part; otherwise staff 1 of the first part.
+4. **Skyline:** the melody is built from the candidate's notes in time order. At each onset the highest starting note is a melody candidate; it becomes the melody unless the current melody note is still sounding and higher. A new melody note cuts the previous one short. Time with no melody note becomes rests.
+5. **Octaves:** the whole melody is moved by the number of octaves that keeps it inside D5 to E6 as far as possible, then centers it in that range (the same rule as the transposition suggestion, restricted to multiples of 12).
+6. **Notation:** notes and rests are split at barlines into tied parts. A part keeps its original notation when its start and length are unchanged; otherwise its length is written as the fewest notes from: whole to thirty-second, single-dotted, and triplet half, quarter, eighth, and sixteenth, found by a small search over a grid of 1/24 of a quarter note. Durations off that grid (such as quintuplets) are first rounded to it, and the number of rounded notes is reported.
+7. **Writing:** the result is written as MusicXML in the bundled songs' convention: one part, treble clef, written an octave below sounding pitch with `octave-change` 1, the source's key and time signatures and changes, pickup measure, and first tempo (60 if none). The written file is then loaded with the app's parser, so it is guaranteed to load.
+
+The report lists: the part and staff used, notes dropped from chords and accompaniment, grace notes removed, repeats and jumps written out (measures added), notes rounded, and the octave shift.
+
+Added songs are saved as `~/.local/share/whistle-trainer/songs/<title>.musicxml` (title made safe for a file name, with a number added if needed) and loaded after the bundled songs with ids prefixed `user-`. Removing a song deletes its file and its progress.
 
 ## Assessment engines
 
@@ -238,7 +257,7 @@ Rest events use the same structure with quiet frames instead of accepted frames,
 
 ### Rhythm engine
 
-On start, the engine builds a schedule: four count-in beats, then each event `i` with start `s_i` and end `e_i`, from the selected position onward.
+On start, the engine builds a schedule: four count-in beats in the beat unit of the starting measure, then each event `i` with start `s_i` and end `e_i`, from the selected position onward. Beat times after the count-in follow the measures, so a time signature change changes the beat length from that measure on.
 
 Per note event:
 
@@ -323,6 +342,8 @@ A header bar shows the page title, a Back button, and the listening indicator wh
 - Custom `QWidget` drawn with `QPainter`. The melody is laid out as one continuous staff line that scrolls horizontally; the current event is kept about one third from the left, with smooth animated scrolling.
 - Glyphs come from the Bravura font (SMuFL code points): clef, key and time signatures, note heads, stems, flags, dots, ties, rests, accidentals, and ledger lines. A pair of undotted eighth notes that fills one beat is beamed: both stems take the direction of their average position, and the beam's slope is limited to one staff space.
 - Accidentals follow the key signature and are remembered until the end of the measure; tied continuations do not repeat them.
+- A key or time signature change is drawn at the start of the measure where it happens, after the barline (cancelled sharps or flats are shown with naturals).
+- Consecutive tuplet notes are grouped by their time modification until the group's length is complete, and marked with a bracket and the number ("3") on the side away from the stems.
 - The staff spacing scales with the widget height (7 to 16 pixels per staff space), and the content is centered vertically.
 - Note spacing is proportional to duration with a minimum width so note names fit.
 - Note names are drawn below each note with the sounding octave (for example "B5") and can be hidden in settings.
@@ -345,6 +366,7 @@ Space: Play/Stop in Listen, Pause/Resume in Practice. Left and Right arrows: Pre
 Files are stored using XDG directories through `platformdirs`:
 
 - `~/.config/whistle-trainer/settings.json`: devices, calibration per input, notation preference, sound for Listen and Hear note, and last used mode, difficulty, and transposition per song. Tempo is kept in memory only: selecting a song in the library resets it to the song's own tempo, and it is shared by Listen and Practice until another song is selected.
+- `~/.local/share/whistle-trainer/songs/`: songs added with Add song (see Song import).
 - `~/.local/share/whistle-trainer/progress.json`: per song id and mode: completed event indices, next unfinished event index, retry counts per event, active practice time, and completion records with dates.
 
 Progress is updated after every batch of frames and saved on pause, input loss, leaving the practice page, finishing, and closing the app:
