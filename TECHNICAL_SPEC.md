@@ -140,7 +140,7 @@ The "reliable detected note" shown in the UI is smoothed separately from assessm
 2. **Steady whistle:** record until 1.5 seconds of `PITCHED`-quality frames are collected (provisional threshold: noise floor + 6 dB), up to 10 seconds. Whistle level = median level of those frames.
 3. **Threshold:** activity threshold = midpoint in dB between noise floor and whistle level, and at least noise floor + 6 dB.
 4. **Usability:** if the whistle is less than 12 dB above the noise floor, or no steady pitch is found, show the setup problem message from the product specification.
-5. **Optional range:** the user whistles comfortable low and high notes; the median pitch of each is stored as the practice range and used to suggest a transposition in the library.
+5. **Optional range:** the user whistles comfortable low and high notes; the median pitch of each is stored as the practice range and used to suggest a transposition in the library. Each note needs 2 seconds of steady pitch, collected within 15 seconds. After the low note, a 3-second pause (with its own progress bar and the measured low note shown) gives time to prepare before the high note; input during the pause is ignored.
 
 Calibration results are stored per input device id. Until an input is set up, an activity threshold of −50 dBFS is used.
 
@@ -179,16 +179,16 @@ Anything else that affects the melody (chords, multiple voices, staves or parts,
 
 ### Bundled arrangements
 
-All in 4/4 and G major, sounding within D5 to E6, default tempo 60:
+All in 4/4 and G major, sounding within D5 to E6. Each file states the song's usual tempo, which is where Listen and Practice start:
 
-| Song | Sounding range | Notes |
-| --- | --- | --- |
-| Introductory exercise | G5 to B5 | Whole, half, and quarter notes; a tied note; a repeated note; a rest. |
-| Twinkle Twinkle Little Star | G5 to E6 | Quarter and half notes. |
-| Ode to Joy | D5 to D6 | Includes the dotted quarter and eighth. |
-| Frère Jacques | D5 to E6 | Includes the eighth-note phrase. |
+| Song | Sounding range | Tempo | Notes |
+| --- | --- | --- | --- |
+| Introductory exercise | G5 to B5 | 60 | Whole, half, and quarter notes; a tied note; a repeated note; a rest. |
+| Twinkle Twinkle Little Star | G5 to E6 | 90 | Quarter and half notes. |
+| Ode to Joy | D5 to D6 | 100 | Includes the dotted quarter and eighth. |
+| Frère Jacques | D5 to E6 | 100 | Includes the eighth-note phrase. |
 
-The shortest note is an eighth (0.5 seconds at 60 bpm), following the product specification's caution about very short notes.
+The shortest note is an eighth: 0.3 seconds at 100 bpm. Users who find this too fast can lower the tempo for the session.
 
 ### Transposition
 
@@ -296,7 +296,7 @@ A single `QMainWindow` with a `QStackedWidget`:
 | --- | --- |
 | Library | Song list with length, range, and progress in the selected mode ("—", "12 of 42 notes", "✓ Completed", "✓ Completed 3×"); Show note names; Reset all data (with confirmation). Preparation panel: mode (Guided or Rhythm, with a one-line description), metronome sound option (rhythm mode, saved globally), tempo, difficulty, transposition with the transposed range and, if a range was measured, a suggestion with Use; estimated length; Start practice; Continue from note n (when saved progress has an unfinished note); Listen; Reset progress (with confirmation); Audio setup. The introductory exercise is listed first. |
 | Audio setup | Input and output selectors, live level meter, detected note, step-by-step calibration with status text, Measure my range, and Test input. |
-| Test input | Whistle one selectable target note (C5 to C7, default the middle of the measured range, else B5) with the detected note, pitch meter, hold indicator for a 1-second hold, guidance text, and Try again. Uses the guided-mode hold rules. |
+| Test input | Whistle one selectable target note (C5 to C7, default the middle of the measured range, else B5) with the detected note, pitch meter, hold indicator for a 1-second hold, guidance text, and Try again. Uses the guided-mode hold rules. **Random note** replaces the chosen target with a random one from the measured comfortable range (or D5 to E6, the range of the bundled songs, if none was measured), never the same note twice in a row; 1.5 seconds after a note is hit, the next random note appears, and a counter shows how many notes were hit. |
 | Listen | Score view (clickable), the highlighted note with its length in beats, Previous note, Play song/Stop, Next note, Practice from here, tempo, and transposition. |
 | Practice | Song title as page title, "Note n of m", score view, target note and octave (or "Rest"), detected note, pitch meter, hold indicator ("Hold" or "Quiet"; in rhythm mode against the 80 percent requirement), guidance ("Get ready… n" during the count-in, "Whistle G5 now" in rhythm mode), beat indicator (rhythm), and controls: Pause/Resume and Restart song; Retry after a rhythm failure; Audio setup when the input is missing or lost; Hear note; Restart section when a section is chosen. While paused, a panel offers mode, tempo, difficulty, and transposition, and the score becomes clickable: click sets the start, Shift+click sets the end of a section (shaded on the score), and Clear section returns to the whole song. Changes keep the current position and discard unfinished progress. Listening starts when practice is started; returning to the page (for example from Audio setup) stays paused until Resume. Finishing opens the summary. |
 | Summary | "Song complete!" or "Section complete!", a note when every note of the song is now completed in the mode, mode, what was practiced (whole song, "Measure 5", "Measures 3–4", or "From measure 5 to the end"), active practice time, retries, the three notes with the most retries, and buttons: Practice measure n again (the measure with the most retries, if any), Repeat (same section or song), Restart song (whole song), and Library. Back returns to the library. |
@@ -329,7 +329,7 @@ Space: Play/Stop in Listen, Pause/Resume in Practice. Left and Right arrows: Pre
 
 Files are stored using XDG directories through `platformdirs`:
 
-- `~/.config/whistle-trainer/settings.json`: devices, calibration per input, notation preference, last used mode, difficulty, tempo, and transposition per song.
+- `~/.config/whistle-trainer/settings.json`: devices, calibration per input, notation preference, and last used mode, difficulty, and transposition per song. Tempo is kept in memory only: selecting a song in the library resets it to the song's own tempo, and it is shared by Listen and Practice until another song is selected.
 - `~/.local/share/whistle-trainer/progress.json`: per song id and mode: completed event indices, next unfinished event index, retry counts per event, active practice time, and completion records with dates.
 
 Progress is updated after every batch of frames and saved on pause, input loss, leaving the practice page, finishing, and closing the app:
