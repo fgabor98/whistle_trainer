@@ -86,7 +86,7 @@ Full melody preview is available before practice or while paused through Listen 
 
 ### Listen mode
 
-Listen mode plays the loaded song from the computer so users can learn how it should sound before whistling it. It never captures or assesses audio, and records no practice progress or retries. Playback uses the selected tempo and transposition at a comfortable fixed volume, in one of two sounds: a clear, whistle-like tone, or a recorded classical grand piano. The choice is remembered and also used by Hear target note.
+Listen mode plays the loaded song from the computer so users can learn how it should sound before whistling it. It never captures or assesses audio, and records no practice progress or retries. Playback uses the selected tempo and transposition at a comfortable fixed volume, in one of two sounds: a recorded classical grand piano (the default), or a clear, whistle-like tone. The choice is remembered and also used by Hear target note.
 
 - **Play song:** One click plays the whole melody from the selected note to the end, observing written durations, ties, and rests. The score highlights and scrolls to each note as it sounds. Stop halts playback and keeps the highlight on the last played note; playing again resumes from there, or from the start after the song has finished.
 - **Note by note:** Next note and Previous note move the highlight and play that single note for its written duration at the selected tempo; tied notes play as one sound. Selecting a note on the score plays it and makes it the current position. Rests are highlighted silently with “Rest” and its duration shown.

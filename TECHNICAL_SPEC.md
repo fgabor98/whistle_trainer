@@ -266,7 +266,7 @@ The metronome click is short (20 ms) and broadband, so it is classified as `UNCL
 
 ### Sounds
 
-The Listen page offers a **Sound** choice, Whistle or Piano, saved in the settings (`listen_sound`, default Whistle) and also used by Hear target note. Every note is rendered for exactly its duration, so consecutive notes never overlap. `audio/sounds.py` renders a note in the chosen sound.
+The Listen page offers a **Sound** choice, Whistle or Piano, saved in the settings (`listen_sound`, default Piano) and also used by Hear target note. Every note is rendered for exactly its duration, so consecutive notes never overlap. `audio/sounds.py` renders a note in the chosen sound.
 
 #### Whistle
 
