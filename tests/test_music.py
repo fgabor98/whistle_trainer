@@ -96,3 +96,9 @@ def test_timing(parse):
     assert event_times(song, 60) == pytest.approx([(0, 1.5), (1.5, 2.0), (2.0, 4.0)])
     assert event_times(song, 120, start_index=1) == pytest.approx([(0, 0.25), (0.25, 1.25)])
     assert beat_seconds(song.time, 60) == pytest.approx(1.0)
+
+
+def test_transposing_moves_every_measure_key(parse):
+    song = parse(score(whole(), "<attributes><key><fifths>2</fifths></key></attributes>" + whole()))
+    up = transpose_song(song, 2)
+    assert [m.key.fifths for m in up.measures] == [2, 4]

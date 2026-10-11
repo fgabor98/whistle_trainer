@@ -19,6 +19,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from enum import StrEnum
+from fractions import Fraction
 
 from whistle_trainer import config
 from whistle_trainer.assessment.frames import AnalysisFrame, FrameClass
@@ -72,9 +73,10 @@ class RhythmUpdate:
 @dataclass
 class _Schedule:
     count_in_start: float
-    beat: float
     first_start: float
     events: dict[int, _EventState] = field(default_factory=dict)
+    # Every beat: (time, position in its measure with 0 = downbeat, beats in that measure).
+    beats: list[tuple[float, int, int]] = field(default_factory=list)
 
 
 class RhythmEngine:
@@ -106,11 +108,15 @@ class RhythmEngine:
 
     def schedule(self, count_in_start: float) -> None:
         """Start a count-in at count_in_start, followed by the song from the current position."""
-        beat = beat_seconds(self.song.time, self.tempo)
+        start_measure = self.song.measures[self.event.parts[0].measure_index]
+        beat = beat_seconds(start_measure.time, self.tempo)
         first = count_in_start + config.COUNT_IN_BEATS * beat
-        schedule = _Schedule(count_in_start, beat, first)
+        schedule = _Schedule(count_in_start, first)
+        schedule.beats = [(count_in_start + i * beat, i % start_measure.time.beats, start_measure.time.beats)
+                          for i in range(config.COUNT_IN_BEATS)]
         self._scheduled_from = self.position
         origin = self.song.events[self.position].start
+        schedule.beats += self._song_beats(start_measure.index, origin, first)
         for event in self.song.events[self.position:self.end_index]:
             start = first + seconds(event.start - origin, self.tempo)
             duration = seconds(event.duration, self.tempo)
@@ -139,14 +145,31 @@ class RhythmEngine:
         self.completed = {i for i in self.completed if i < index}
         self.status = RhythmStatus.IDLE
 
+    def _song_beats(self, first_measure: int, origin: Fraction, first_time: float) -> list[tuple[float, int, int]]:
+        """Beats from `origin` to the end of the scheduled events, each in its own measure's meter."""
+        end = self.song.events[self.end_index - 1].end
+        beats = []
+        for measure in self.song.measures[first_measure:]:
+            if measure.start >= end:
+                break
+            length = measure.time.beat_length
+            # A pickup measure holds the last beats of a full measure.
+            shortfall = measure.time.measure_length - measure.duration if measure.index == 0 else Fraction(0)
+            for number in range(measure.time.beats):
+                position = measure.start - shortfall + number * length
+                if measure.start <= position < measure.start + measure.duration and origin <= position < end:
+                    beats.append((first_time + seconds(position - origin, self.tempo), number, measure.time.beats))
+        return beats
+
     def beat_times(self) -> list[float]:
         """Count-in beats followed by the beats of the scheduled song."""
-        schedule = self.schedule_data
-        if schedule is None:
-            return []
-        last = schedule.events[self.end_index - 1].end
-        count = math.ceil((last - schedule.count_in_start) / schedule.beat - 1e-9)
-        return [schedule.count_in_start + i * schedule.beat for i in range(count)]
+        return [] if self.schedule_data is None else [beat[0] for beat in self.schedule_data.beats]
+
+    def beats_per_measure(self, beat_index: int) -> int:
+        """Beats in the measure of a beat from beat_times()."""
+        if self.schedule_data is None:
+            return self.song.time.beats
+        return self.schedule_data.beats[beat_index][2]
 
     def event_times(self, index: int) -> tuple[float, float] | None:
         if self.schedule_data is None or index not in self.schedule_data.events:
@@ -169,15 +192,7 @@ class RhythmEngine:
 
         Count-in beats count from 0; song beats follow the song's measures.
         """
-        if beat_index < config.COUNT_IN_BEATS:
-            return beat_index % self.song.time.beats
-        beat_length = self.song.time.beat_length
-        quarters = self.song.events[self._scheduled_from].start + (beat_index - config.COUNT_IN_BEATS) * beat_length
-        measure = next((m for m in reversed(self.song.measures) if m.start <= quarters), self.song.measures[0])
-        offset = quarters - measure.start
-        if measure.index == 0:  # a pickup measure ends on the last beats of a full measure
-            offset += self.song.time.measure_length - measure.duration
-        return int(offset / beat_length) % self.song.time.beats
+        return self.schedule_data.beats[beat_index][1] if self.schedule_data else 0
 
     # Assessment
 

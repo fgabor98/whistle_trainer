@@ -284,7 +284,8 @@ class ListenPage(QWidget):
         if self.score.current != self.position:
             self.score.set_current(self.position)
         event = self.song.events[self.position]
-        beats = describe_beats(event.duration, self.song.time.beat_length)
+        measure = self.song.measures[event.parts[0].measure_index]
+        beats = describe_beats(event.duration, measure.time.beat_length)
         self.note_label.setText(strings.LISTEN_NOTE.format(note=event.pitch.name, beats=beats) if event.is_note
                                 else strings.LISTEN_REST.format(beats=beats))
         self.hint_label.setText(self.message or strings.LISTEN_HINT)

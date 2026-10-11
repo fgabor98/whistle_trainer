@@ -214,10 +214,12 @@ class ScoreView(QWidget):
         painter.drawText(QPointF(self.x_for(0.8), self.y_for(2)), G_CLEF)
         for i, (alter, position) in enumerate(layout.key_signature):
             painter.drawText(QPointF(self.x_for(layout.key_x + i * 1.1), self.y_for(position)), ACCIDENTALS[alter])
-        beats, beat_type = layout.time_signature
-        for value, position in ((beats, 6), (beat_type, 2)):
-            digits = "".join(TIME_SIG_DIGITS[int(d)] for d in str(value))
-            painter.drawText(QPointF(self.x_for(layout.time_x), self.y_for(position)), digits)
+        for change in layout.changes:
+            for i, (alter, position) in enumerate(change.key_signature):
+                painter.drawText(QPointF(self.x_for(change.key_x + i * 1.1), self.y_for(position)), ACCIDENTALS[alter])
+            if change.time_signature:
+                self._draw_time_signature(painter, change.time_x, change.time_signature)
+        self._draw_time_signature(painter, layout.time_x, layout.time_signature)
 
         visible = (self.scroll / sp - 6, (self.scroll + self.width()) / sp + 2)
         for part in layout.parts:
@@ -252,6 +254,11 @@ class ScoreView(QWidget):
                 rect = QRectF(self.x_for(event.left), self.y_for(16), (event.right - event.left) * sp, 2 * sp)
                 mark = CROSS_MARK if index == self.failed else CHECK_MARK
                 painter.drawText(rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom, mark)
+
+    def _draw_time_signature(self, painter: QPainter, x: float, signature: tuple[int, int]) -> None:
+        for value, position in zip(signature, (6, 2)):
+            digits = "".join(TIME_SIG_DIGITS[int(d)] for d in str(value))
+            painter.drawText(QPointF(self.x_for(x), self.y_for(position)), digits)
 
     def _draw_final_barline(self, painter: QPainter, color: QColor, x: float) -> None:
         sp = self.space

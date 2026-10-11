@@ -125,6 +125,13 @@ class Measure:
     number: str  # as written in the file
     start: Fraction
     duration: Fraction
+    key: KeySignature = KeySignature(0)  # in effect in this measure, for the sounding pitches
+    time: TimeSignature = TimeSignature(4, 4)  # in effect in this measure
+
+    @property
+    def is_partial(self) -> bool:
+        """Shorter than its time signature, such as a pickup measure."""
+        return self.duration < self.time.measure_length
 
 
 @dataclass(frozen=True)

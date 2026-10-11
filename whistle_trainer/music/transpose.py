@@ -71,7 +71,8 @@ def transpose_song(song: Song, semitones: int) -> Song:
         replace(e, pitch=transpose_pitch(e.pitch, diatonic, semitones)) if e.pitch else e
         for e in song.events
     )
-    return replace(song, key=key, events=events)
+    measures = tuple(replace(m, key=transpose_key(m.key, semitones)) for m in song.measures)
+    return replace(song, key=key, events=events, measures=measures)
 
 
 def suggest_transposition(song: Song, low_midi: int, high_midi: int) -> int:

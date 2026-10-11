@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import bisect
 import time
 from enum import StrEnum
 
@@ -542,7 +543,8 @@ class PracticePage(QWidget):
         beats = self.rhythm.beat_times()
         if now is None or not beats or now < beats[0]:
             return None, None
-        index = min(int((now - beats[0]) / (beats[1] - beats[0])) if len(beats) > 1 else 0, len(beats) - 1)
+        # Beats can differ in length when the time signature changes, so search for the last one started.
+        index = bisect.bisect_right(beats, now) - 1
         return index, self.rhythm.beat_in_measure(index)
 
     def _guidance(self, cents: float | None) -> str:
@@ -599,8 +601,9 @@ class PracticePage(QWidget):
         if self.mode is Mode.RHYTHM:
             beating = self.state is PracticeState.RUNNING and \
                 self.rhythm.status in (RhythmStatus.COUNT_IN, RhythmStatus.PLAYING)
-            _, beat = self._rhythm_beat() if beating else (None, None)
-            self.beat_indicator.set_beat(beat, self.song.time.beats)
+            index, beat = self._rhythm_beat() if beating else (None, None)
+            beats = self.rhythm.beats_per_measure(index) if index is not None else self.song.time.beats
+            self.beat_indicator.set_beat(beat, beats)
 
         self.detected_label.setText(describe_detected(self.display) if self.state is PracticeState.RUNNING else "")
         self.guide_label.setText(self._guidance(cents))

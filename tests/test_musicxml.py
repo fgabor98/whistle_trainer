@@ -124,9 +124,6 @@ def test_tempo(parse, header, expected):
     (score(whole(), whole(), attributes=DEFAULT_ATTRIBUTES.replace("<time>", "<!--").replace("</time>", "-->")), "time signature"),
     (score(whole(), note("C5") * 3, whole()), "requires 4"),
     (score(whole() + note()), "requires 4"),
-    (score(whole(), "<attributes><time><beats>3</beats><beat-type>4</beat-type></time></attributes>"
-           + note("C5", 6, "half", dots=1)), "time signature changes"),
-    (score(whole(), "<attributes><key><fifths>2</fifths></key></attributes>" + whole()), "key signature changes"),
     (score(note("C5", 4, "half", TIE_START) + note("D5", 4, "half", TIE_STOP)), "different pitch"),
     (score(note("C5", 4, "half", TIE_START) + note("C5", 4, "half")), "does not end"),
     (score(whole("C5", TIE_START)), "does not end"),
@@ -221,3 +218,40 @@ def test_triplets_are_read_with_their_sounding_length(parse):
 def test_rejects_invalid_tuplets(parse, text, message):
     with pytest.raises(SongFormatError, match=message):
         parse(text)
+
+
+def test_key_and_time_changes_apply_from_their_measure(parse):
+    three_four = "<attributes><time><beats>3</beats><beat-type>4</beat-type></time></attributes>"
+    d_major = "<attributes><key><fifths>2</fifths></key></attributes>"
+    song = parse(score(whole(), three_four + note("C5", 6, "half", dots=1), d_major + note("D5", 6, "half", dots=1)))
+    assert [(m.time.beats, m.time.beat_type) for m in song.measures] == [(4, 4), (3, 4), (3, 4)]
+    assert [m.key.fifths for m in song.measures] == [0, 0, 2]
+    assert song.time == song.measures[0].time and song.key == song.measures[0].key
+    assert song.length == 10
+
+
+def test_measure_length_follows_the_current_time_signature(parse):
+    three_four = "<attributes><time><beats>3</beats><beat-type>4</beat-type></time></attributes>"
+    with pytest.raises(SongFormatError, match="requires 3"):
+        parse(score(whole(), three_four + whole(), whole()))
+
+
+@pytest.mark.parametrize("change", [
+    "<attributes><time><beats>3</beats><beat-type>4</beat-type></time></attributes>",
+    "<attributes><key><fifths>2</fifths></key></attributes>",
+])
+def test_changes_in_the_middle_of_a_measure_are_rejected(parse, change):
+    with pytest.raises(SongFormatError, match="must be at the start of a measure"):
+        parse(score(note("C5", 4, "half") + change + note("C5", 4, "half")))
+
+
+def test_implicit_measures_may_be_short(parse):
+    text = score(whole(), note("C5", 4, "half"), whole()).replace('<measure number="2">', '<measure number="2" implicit="yes">')
+    assert parse(text).measures[1].duration == 2
+
+
+def test_chromatic_transposition_applies_to_every_measure_key(parse):
+    attributes = DEFAULT_ATTRIBUTES.replace(
+        "</attributes>", "<transpose><chromatic>-2</chromatic><diatonic>-1</diatonic></transpose></attributes>")
+    song = parse(score(whole(), "<attributes><key><fifths>1</fifths></key></attributes>" + whole(), attributes=attributes))
+    assert [m.key.fifths for m in song.measures] == [-2, -1]  # B♭ and F major sounding

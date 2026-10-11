@@ -76,6 +76,30 @@ class EventLayout:
 
 
 @dataclass
+class SignatureChange:
+    """A key and/or time signature change drawn after a barline."""
+
+    key_x: float
+    key_signature: list[tuple[int, int]]  # (alter, staff position); alter 0 is a cancelling natural
+    time_x: float
+    time_signature: tuple[int, int] | None
+
+
+def key_signature_glyphs(fifths: int, previous: int | None = None) -> list[tuple[int, int]]:
+    """Accidentals of a key signature, preceded by naturals for accidentals of the previous key it drops."""
+    def glyphs(value: int) -> list[tuple[int, int]]:
+        positions = SHARP_POSITIONS if value >= 0 else FLAT_POSITIONS
+        return [(1 if value > 0 else -1, position) for position in positions[:abs(value)]]
+
+    new = glyphs(fifths)
+    if previous is None:
+        return new
+    kept = set(new)
+    naturals = [(0, position) for alter, position in glyphs(previous) if (alter, position) not in kept]
+    return naturals + new
+
+
+@dataclass
 class ScoreLayout:
     key_x: float
     key_signature: list[tuple[int, int]]  # (alter, staff position)
@@ -87,15 +111,14 @@ class ScoreLayout:
     width: float
     beams: list[tuple[int, int]] = field(default_factory=list)  # indexes into parts
     tuplets: list[tuple[int, int, int]] = field(default_factory=list)  # first part, last part, number
+    changes: list[SignatureChange] = field(default_factory=list)
 
 
 def layout_song(song: Song) -> ScoreLayout:
     x = 0.8 + CLEF_WIDTH + 0.8
     alters = key_alters(song.key.fifths)
-    signature = []
-    positions = SHARP_POSITIONS if song.key.fifths >= 0 else FLAT_POSITIONS
-    for position in positions[: abs(song.key.fifths)]:
-        signature.append((1 if song.key.fifths > 0 else -1, position))
+    signature = key_signature_glyphs(song.key.fifths)
+    changes: list[SignatureChange] = []
     key_x = x
     x += abs(song.key.fifths) * 1.1 + (0.6 if song.key.fifths else 0.0)
     time_x = x
@@ -114,6 +137,16 @@ def layout_song(song: Song) -> ScoreLayout:
             if part.measure_index != measure_index:
                 barlines.append(x - 0.6)
                 x += 0.9
+                previous, measure = song.measures[measure_index], song.measures[part.measure_index]
+                if measure.key != previous.key or measure.time != previous.time:
+                    glyphs = key_signature_glyphs(measure.key.fifths, previous.key.fifths) \
+                        if measure.key != previous.key else []
+                    change = SignatureChange(x, glyphs, x + len(glyphs) * 1.1 + (0.6 if glyphs else 0.0),
+                                             (measure.time.beats, measure.time.beat_type)
+                                             if measure.time != previous.time else None)
+                    x = change.time_x + (TIME_SIG_WIDTH + 1.2 if change.time_signature else 0.4)
+                    changes.append(change)
+                alters = key_alters(measure.key.fifths)
                 measure_index = part.measure_index
                 measure_state = {}
 
@@ -163,6 +196,7 @@ def layout_song(song: Song) -> ScoreLayout:
     layout = ScoreLayout(key_x, signature, time_x, (song.time.beats, song.time.beat_type), parts, events, barlines, x)
     layout.beams = _beam_eighth_pairs(song, parts)
     layout.tuplets = _tuplet_groups(parts)
+    layout.changes = changes
     return layout
 
 
@@ -191,9 +225,9 @@ def _tuplet_groups(parts: list[PartLayout]) -> list[tuple[int, int, int]]:
 
 def _beam_eighth_pairs(song: Song, parts: list[PartLayout]) -> list[tuple[int, int]]:
     """Pairs of undotted eighth notes that fill one beat of a measure, given a shared stem direction."""
-    beat = float(song.time.beat_length)
     beams = []
     for i, (first, second) in enumerate(zip(parts, parts[1:])):
+        beat = float(song.measures[first.measure_index].time.beat_length)
         if any(p.note_type != "eighth" or p.dots or p.position is None or p.beamed or p.tuplet
                for p in (first, second)):
             continue

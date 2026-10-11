@@ -110,3 +110,29 @@ def test_triplets_draw_without_errors(parse, qtbot):
     view.set_song(song)
     view.set_current(0, animate=False)
     view.grab()
+
+
+def test_signature_changes_are_drawn_after_the_barline(parse, qtbot):
+    three_four_d_major = ("<attributes><key><fifths>2</fifths></key>"
+                          "<time><beats>3</beats><beat-type>4</beat-type></time></attributes>")
+    back_to_c = "<attributes><key><fifths>0</fifths></key></attributes>"
+    song = parse(score(whole(), three_four_d_major + note("F#4", 6, "half", dots=1),
+                       back_to_c + note("F4", 6, "half", dots=1)))
+    layout = layout_song(song)
+    first, second = layout.changes
+    assert first.key_signature == [(1, 8), (1, 5)] and first.time_signature == (3, 4)
+    assert second.key_signature == [(0, 8), (0, 5)] and second.time_signature is None  # naturals cancel
+    assert layout.barlines[0] < first.key_x < first.time_x < layout.parts[1].x
+    # F♯ is in the new key, so it needs no accidental; F after returning to C needs none either.
+    assert [p.accidental for p in layout.parts] == [None, None, None]
+    view = ScoreView()
+    qtbot.addWidget(view)
+    view.resize(600, 240)
+    view.set_song(song)
+    view.grab()
+
+
+def test_key_signature_glyphs_with_cancellation():
+    from whistle_trainer.ui.score_layout import key_signature_glyphs
+    assert key_signature_glyphs(-1, previous=2) == [(0, 8), (0, 5), (-1, 4)]
+    assert key_signature_glyphs(3, previous=1) == [(1, 8), (1, 5), (1, 9)]

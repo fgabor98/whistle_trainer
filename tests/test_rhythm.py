@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from audio_helpers import SAMPLE_RATE, FrameScript, analyze, silence, tone
-from conftest import note, score
+from conftest import note, score, whole
 from whistle_trainer import config
 from whistle_trainer.assessment.frames import AnalysisFrame, FrameClass
 from whistle_trainer.assessment.rhythm import FailReason, RhythmEngine, RhythmStatus
@@ -257,3 +257,33 @@ def test_section_schedules_only_its_events(parse):
 def test_current_credit_before_scheduling_shows_requirement(parse):
     engine = RhythmEngine(parse(score(note("C5") * 4)), 60, 40.0, HOP)
     assert engine.current_credit() == pytest.approx((0.0, 0.8))
+
+
+THREE_FOUR = "<attributes><time><beats>3</beats><beat-type>4</beat-type></time></attributes>"
+SIX_EIGHT = "<attributes><time><beats>6</beats><beat-type>8</beat-type></time></attributes>"
+
+
+def test_beats_follow_a_time_signature_change(parse):
+    engine = engine_for(parse, note("C5", 8, "whole"), THREE_FOUR + note("D5", 6, "half", dots=1),
+                        SIX_EIGHT + note("E5", 6, "half", dots=1))
+    times = engine.beat_times()
+    # Count-in in 4/4, then 4 beats of 4/4, 3 of 3/4, and 6 eighth-note beats of 6/8 at 60 bpm.
+    assert len(times) == 4 + 4 + 3 + 6
+    assert times[8:12] == pytest.approx([8.0, 9.0, 10.0, 11.0])
+    assert times[12] - times[11] == pytest.approx(0.5)
+    assert [engine.beat_in_measure(i) for i in range(len(times))] == [0, 1, 2, 3] + [0, 1, 2, 3] + [0, 1, 2] + list(range(6))
+    assert engine.beats_per_measure(9) == 3 and engine.beats_per_measure(12) == 6
+
+
+def test_count_in_uses_the_meter_of_the_starting_measure(parse):
+    song = parse(score(note("C5", 8, "whole"), THREE_FOUR + note("D5", 6, "half", dots=1)))
+    engine = RhythmEngine(song, 60, 40.0, HOP, start_index=1)
+    engine.schedule(0.0)
+    assert engine.beat_times()[:5] == pytest.approx([0, 1, 2, 3, 4])
+    assert [engine.beat_in_measure(i) for i in range(4)] == [0, 1, 2, 0]
+    assert engine.event_times(1) == pytest.approx((4.0, 7.0))
+
+
+def test_pickup_measure_beats_end_on_the_last_beats(parse):
+    engine = engine_for(parse, note("C5"), whole("D5"))
+    assert [engine.beat_in_measure(i) for i in range(4, 9)] == [3, 0, 1, 2, 3]

@@ -9,7 +9,7 @@ only affect appearance, such as dynamics, lyrics, and slurs, are ignored.
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from fractions import Fraction
 from pathlib import Path
 
@@ -122,15 +122,14 @@ class _Parser:
             raise self.error("contains no notes")
 
         transpose = self.transpose or _Transpose(7 * _DEFAULT_OCTAVE_CHANGE, 12 * _DEFAULT_OCTAVE_CHANGE)
-        key = self.key or KeySignature(0)
-        if transpose.chromatic % 12:
-            key = transpose_key(key, transpose.chromatic)
+        if transpose.chromatic % 12:  # keys are stored for the sounding pitches
+            measures = [replace(m, key=transpose_key(m.key, transpose.chromatic)) for m in measures]
         tempo = round(self.tempo or config.DEFAULT_TEMPO)
         return Song(
             id=song_id,
             title=title or song_id,
-            key=key,
-            time=self.time,
+            key=measures[0].key,
+            time=measures[0].time,
             tempo=min(max(tempo, config.MIN_TEMPO), config.MAX_TEMPO),
             events=self.build_events(written, transpose),
             measures=tuple(measures),
@@ -146,7 +145,7 @@ class _Parser:
             length = Fraction(0)
             for child in element:
                 if child.tag == "attributes":
-                    self.read_attributes(child, first_measure=index == 0)
+                    self.read_attributes(child, first_measure=index == 0, at_measure_start=length == 0)
                 elif child.tag == "note":
                     note = self.read_note(child, index)
                     written.append(note)
@@ -158,24 +157,25 @@ class _Parser:
                 elif child.tag == "barline":
                     if child.find("repeat") is not None or child.find("ending") is not None:
                         raise self.error("repeats and endings are not supported; write the music out in full")
-            self.check_measure_length(length, is_edge=index in (0, len(elements) - 1))
-            measures.append(Measure(index, self.measure, position, length))
+            partial_allowed = index in (0, len(elements) - 1) or element.get("implicit") == "yes"
+            self.check_measure_length(length, partial_allowed)
+            measures.append(Measure(index, self.measure, position, length, self.key or KeySignature(0), self.time))
             position += length
         return written, measures
 
-    def check_measure_length(self, length: Fraction, is_edge: bool) -> None:
+    def check_measure_length(self, length: Fraction, partial_allowed: bool) -> None:
         if self.time is None:
             raise self.error("has no time signature")
         expected = self.time.measure_length
         if length == 0:
             raise self.error("is empty")
-        if length > expected or (length < expected and not is_edge):
+        if length > expected or (length < expected and not partial_allowed):
             raise self.error(
                 f"contains {_quarters(length)} quarter notes, but the time signature "
                 f"requires {_quarters(expected)}"
             )
 
-    def read_attributes(self, element: ET.Element, first_measure: bool) -> None:
+    def read_attributes(self, element: ET.Element, first_measure: bool, at_measure_start: bool) -> None:
         if (divisions := element.findtext("divisions")) is not None:
             self.divisions = self.parse_positive_int(divisions, "divisions")
         if (staves := element.findtext("staves")) is not None and staves.strip() != "1":
@@ -187,7 +187,8 @@ class _Parser:
             new_key = KeySignature(self.parse_int(key.findtext("fifths"), "key fifths"), key.findtext("mode", "major"))
             if not -7 <= new_key.fifths <= 7:
                 raise self.error("key signature has too many accidentals")
-            self.check_unchanged(self.key, new_key, first_measure, "key signature changes")
+            if new_key != self.key and not at_measure_start:
+                raise self.error("key signature changes must be at the start of a measure")
             self.key = new_key
 
         if (time := element.find("time")) is not None:
@@ -195,7 +196,8 @@ class _Parser:
             if beats is None or beat_type is None:
                 raise self.error("only standard time signatures are supported")
             new_time = TimeSignature(self.parse_positive_int(beats, "beats"), self.parse_positive_int(beat_type, "beat type"))
-            self.check_unchanged(self.time, new_time, first_measure, "time signature changes")
+            if new_time != self.time and not at_measure_start:
+                raise self.error("time signature changes must be at the start of a measure")
             self.time = new_time
 
         for clef in element.findall("clef"):
