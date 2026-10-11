@@ -862,3 +862,14 @@ def test_hear_note_uses_the_chosen_sound(window, audio, playback, settings):
     page.hear_button.click()
     _, samples = playback.scheduled[-1]
     assert np.array_equal(samples, piano(page.event.pitch.frequency(), config.REFERENCE_NOTE_S, playback.rate))
+
+
+def test_song_opened_without_selecting_it_starts_at_its_own_tempo(qtbot, tmp_path, devices, audio, playback):
+    path = tmp_path / "settings.json"
+    path.write_text('{"schema_version": 1, "song_preferences": {"twinkle-twinkle-little-star": {"mode": "guided"}}}')
+    settings = SettingsStore(path)
+    settings.load()
+    window = MainWindow(load_songs(), settings, ProgressStore(tmp_path / "progress.json"), devices, audio, playback)
+    qtbot.addWidget(window)
+    window.start_listening("twinkle-twinkle-little-star")  # never selected in the library
+    assert window.listen_page.tempo_spin.value() == 90

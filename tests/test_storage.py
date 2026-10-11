@@ -78,7 +78,8 @@ def test_out_of_range_preferences_are_clamped_and_old_tempo_ignored(settings_pat
     }), encoding="utf-8")
     store = SettingsStore(settings_path)
     assert store.load() is None
-    assert store.settings.song_preferences["x"].tempo == 60
+    assert store.settings.song_preferences["x"].tempo is None
+    assert store.settings.preferences_for("x", default_tempo=90).tempo == 90  # the song's own tempo
     assert store.settings.song_preferences["x"].transposition == -12
 
 

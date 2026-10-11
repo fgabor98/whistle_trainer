@@ -46,8 +46,8 @@ class SongPreferences:
     mode: Mode = config.DEFAULT_MODE
     difficulty: Difficulty = config.DEFAULT_DIFFICULTY
     # The tempo of the current session with this song. It is not saved: each time the
-    # song is selected it starts again at the song's own tempo.
-    tempo: int = config.DEFAULT_TEMPO
+    # song is selected it starts again at the song's own tempo. None until first used.
+    tempo: int | None = None
     transposition: int = 0
 
     @classmethod
@@ -79,10 +79,11 @@ class Settings:
     song_preferences: dict[str, SongPreferences] = field(default_factory=dict)
 
     def preferences_for(self, song_id: str, default_tempo: int) -> SongPreferences:
-        """Saved preferences for a song, or defaults using the song's own tempo."""
-        if song_id not in self.song_preferences:
-            self.song_preferences[song_id] = SongPreferences(tempo=default_tempo)
-        return self.song_preferences[song_id]
+        """Saved preferences for a song, or defaults; a tempo not yet set is the song's own."""
+        preferences = self.song_preferences.setdefault(song_id, SongPreferences())
+        if preferences.tempo is None:
+            preferences.tempo = default_tempo
+        return preferences
 
     def to_dict(self) -> dict:
         data = {"schema_version": SCHEMA_VERSION, **asdict(self)}
