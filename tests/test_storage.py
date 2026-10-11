@@ -23,6 +23,7 @@ def test_settings_default_when_missing(settings_path):
     store = SettingsStore(settings_path)
     assert store.load() is None
     assert store.settings.show_note_names is True
+    assert store.settings.listen_sound is Sound.PIANO
     assert store.settings.input_device is None
 
 

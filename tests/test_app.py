@@ -10,6 +10,7 @@ from whistle_trainer.app import MainWindow
 from whistle_trainer.audio.capture import InputProblem
 from whistle_trainer.config import Difficulty, Mode, Sound
 from whistle_trainer.audio.sounds import piano
+from whistle_trainer.audio.synth import whistle
 from whistle_trainer.assessment.rhythm import RhythmStatus
 from whistle_trainer.music.library import load_songs
 from whistle_trainer.storage.progress import ProgressStore
@@ -846,10 +847,13 @@ def test_turning_random_off_restores_chosen_targets(window, settings):
 def test_listen_sound_choice_is_saved_and_credited(window, playback, settings):
     window.start_listening("introductory-exercise")
     listen = window.listen_page
-    assert listen.sound_combo.currentData() == Sound.WHISTLE
+    assert listen.sound_combo.currentData() == Sound.PIANO  # the default
+    assert listen.credit_label.isVisibleTo(listen)
+    listen.sound_combo.setCurrentIndex(listen.sound_combo.findData(Sound.WHISTLE))
+    assert settings.settings.listen_sound is Sound.WHISTLE and settings.path.exists()
     assert not listen.credit_label.isVisibleTo(listen)
     listen.sound_combo.setCurrentIndex(listen.sound_combo.findData(Sound.PIANO))
-    assert settings.settings.listen_sound is Sound.PIANO and settings.path.exists()
+    assert settings.settings.listen_sound is Sound.PIANO
     assert listen.credit_label.isVisibleTo(listen)
     listen.play_note(0)  # G5, four beats at 60 bpm
     _, samples = playback.scheduled[-1]
@@ -857,11 +861,14 @@ def test_listen_sound_choice_is_saved_and_credited(window, playback, settings):
 
 
 def test_hear_note_uses_the_chosen_sound(window, audio, playback, settings):
-    settings.settings.listen_sound = Sound.PIANO
     page = start_intro(window, settings)
-    page.hear_button.click()
+    page.hear_button.click()  # piano by default
     _, samples = playback.scheduled[-1]
     assert np.array_equal(samples, piano(page.event.pitch.frequency(), config.REFERENCE_NOTE_S, playback.rate))
+    settings.settings.listen_sound = Sound.WHISTLE
+    page.hear_button.click()
+    _, samples = playback.scheduled[-1]
+    assert np.array_equal(samples, whistle(page.event.pitch.frequency(), config.REFERENCE_NOTE_S, playback.rate))
 
 
 def test_song_opened_without_selecting_it_starts_at_its_own_tempo(qtbot, tmp_path, devices, audio, playback):

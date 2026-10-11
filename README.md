@@ -70,7 +70,7 @@ Then press **Listen…** to hear the song, **Start practice** (or double-click t
 
 The Listen page plays the song from the computer so you can hear how it should sound. The microphone is not used.
 
-- **Sound:** choose **Whistle** (a whistle-like tone, the sound you will imitate) or **Piano** (a recorded concert grand). The choice is remembered and also used by **Hear note** during practice.
+- **Sound:** **Piano** (a recorded concert grand, the default) or **Whistle** (a whistle-like tone, the sound you will imitate). The choice is remembered and also used by **Hear note** during practice.
 
 - **Play song** plays from the highlighted note to the end; the highlight follows the notes. **Stop** keeps your place.
 - **Previous note** and **Next note** (or the arrow keys) play one note at a time. Click any note to hear it. Rests are highlighted silently.

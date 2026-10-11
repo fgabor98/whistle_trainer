@@ -14,10 +14,10 @@ class Difficulty(StrEnum):
 
 
 class Sound(StrEnum):
-    """How Listen and Hear note play notes."""
+    """How Listen and Hear note play notes. The first one is the default."""
 
-    WHISTLE = "whistle"
     PIANO = "piano"
+    WHISTLE = "whistle"
 
 
 DEFAULT_MODE = Mode.GUIDED

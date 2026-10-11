@@ -81,7 +81,7 @@ Checks that need a real microphone and a real whistle. Run them on the reference
 
 ## Piano sound
 
-1. On the Listen page, choose **Sound: Piano**: songs play with a grand piano sound, in both ears, and the credit line appears. Each note stops at its written length.
+1. On a fresh install (or after **Reset all data…**), the Listen page starts with **Sound: Piano**: songs play with a grand piano sound, in both ears, and the credit line appears. Each note stops at its written length.
 2. Play every bundled song with Piano, including transposed up and down by 12 semitones: every note sounds in tune and at a similar loudness.
 3. Restart the app: Piano is still selected. **Hear note** during practice plays the piano too, and the app does not count it as your whistle when it comes through speakers.
 4. Switch back to **Whistle**: Listen and Hear note use the whistle tone again.

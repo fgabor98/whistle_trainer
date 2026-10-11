@@ -74,7 +74,7 @@ class Settings:
     calibrations: dict[str, Calibration] = field(default_factory=dict)
     show_note_names: bool = config.SHOW_NOTE_NAMES
     metronome_sound: bool = False
-    listen_sound: Sound = Sound.WHISTLE  # Listen page and Hear note
+    listen_sound: Sound = Sound.PIANO  # Listen page and Hear note
     last_song_id: str | None = None
     song_preferences: dict[str, SongPreferences] = field(default_factory=dict)
 
@@ -106,7 +106,7 @@ class Settings:
             },
             show_note_names=require(data, "show_note_names", bool, config.SHOW_NOTE_NAMES),
             metronome_sound=require(data, "metronome_sound", bool, False),
-            listen_sound=_sound(require(data, "listen_sound", str, Sound.WHISTLE)),
+            listen_sound=_sound(require(data, "listen_sound", str, Sound.PIANO)),
             last_song_id=require(data, "last_song_id", str),
             song_preferences={
                 song_id: SongPreferences.from_dict(_object(value))
